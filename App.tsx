@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
+import AuthScreen from './components/AuthScreen';
 import DataEngine from './components/DataEngine';
 import PhysiqueScanner from './components/PhysiqueScanner';
 import WeeklyReport from './components/WeeklyReport';
@@ -10,6 +11,7 @@ import TrainingJournal from './components/TrainingJournal';
 import AdminPanel from './components/AdminPanel';
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
+import { getLocalTimestamp } from './utils/calculations';
 import { Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -27,14 +29,12 @@ const App: React.FC = () => {
     return session === 'active' && !!localStorage.getItem('matrix_active_user');
   });
   
-  const [inputMemberId, setInputMemberId] = useState('');
-  const [inputPassword, setInputPassword] = useState('');
   const [loginError, setLoginError] = useState(false);
 
   const [profile, setProfile] = useState<UserProfile>({
-    name: 'User', age: 25, height: 175, goal: FitnessGoal.HYPERTROPHY,
+    name: 'User', age: 25, height: 175, gender: 'M', goal: FitnessGoal.HYPERTROPHY,
     equipment: [], customEquipmentPool: [], customGoalText: '',
-    loginStreak: 0, lastLoginDate: '',
+    loginStreak: 1, lastLoginDate: '',
     memberId: 'member01', password: '0000'
   });
 
@@ -92,7 +92,7 @@ const App: React.FC = () => {
   }, [isAuthenticated, currentMemberId]);
 
   useEffect(() => {
-    if (!isAuthenticated || !currentMemberId || isAdmin) return;
+    if (!isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
     const timer = setTimeout(() => {
       syncToCloud('profiles', profile, currentMemberId);
       syncToCloud('metrics', metrics, currentMemberId);
@@ -102,17 +102,51 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [profile, metrics, logs, physiqueRecords, isAuthenticated, currentMemberId, isAdmin]);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const mid = inputMemberId.trim().toLowerCase();
+  const handleLogin = async (id: string, pass: string) => {
+    const mid = id.trim().toLowerCase();
     
-    // Dynamic auth check against profile or hardcoded admin
-    if (mid === 'admin_roots' && inputPassword === '8888') {
+    // Check cloud database first for password (including admin_roots)
+    const remoteProfile = await fetchFromCloud('profiles', mid);
+    
+    if (remoteProfile) {
+      if (remoteProfile.password === pass) {
+        executeAuth(mid);
+        return;
+      }
+    }
+
+    // Hardcoded fallback for fresh setup or before admin changes pass
+    if (mid === 'admin_roots' && pass === '8888') {
       executeAuth('admin_roots');
-    } else if (mid === profile.memberId && inputPassword === profile.password) {
-      executeAuth(profile.memberId!);
-    } else {
-      setLoginError(true);
+      return;
+    }
+
+    setLoginError(true);
+  };
+
+  const handleRegister = async (newProfile: UserProfile, initialWeight: number) => {
+    setIsSyncing(true);
+    try {
+      const initialMetric: UserMetrics = {
+        id: Date.now().toString(),
+        date: getLocalTimestamp(),
+        weight: initialWeight,
+        bodyFat: 18, 
+        muscleMass: initialWeight * 0.45 
+      };
+      
+      await Promise.all([
+        syncToCloud('profiles', newProfile, newProfile.memberId),
+        syncToCloud('metrics', [initialMetric], newProfile.memberId)
+      ]);
+      
+      setProfile(newProfile);
+      setMetrics([initialMetric]);
+      executeAuth(newProfile.memberId);
+    } catch (e) {
+      alert("註冊失敗，請重試。");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -135,41 +169,18 @@ const App: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:60px_60px]"></div>
-        </div>
-        <div className="w-full max-w-[360px] space-y-12 relative z-10">
-          <div className="text-center space-y-4">
-            <div className="w-16 h-16 bg-black text-[#bef264] flex items-center justify-center mx-auto font-black text-2xl italic shadow-2xl">M</div>
-            <div className="space-y-1">
-              <h1 className="text-3xl font-black tracking-tighter uppercase text-black">THE MATRIX</h1>
-              <p className="text-[9px] font-black text-gray-300 uppercase tracking-[0.6em]">Visual Tactical Interface</p>
-            </div>
-          </div>
-          <form onSubmit={handleLogin} className="space-y-6 bg-white border border-gray-100 p-8 shadow-[0_25px_60px_-25px_rgba(0,0,0,0.1)]">
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-black uppercase text-gray-400 block tracking-widest flex items-center gap-2">使用者 User</label>
-                <input type="text" value={inputMemberId} onChange={e => setInputMemberId(e.target.value)} className="w-full bg-gray-50 border border-transparent px-4 py-3 text-sm font-bold text-black outline-none focus:border-black focus:bg-white transition-all" placeholder="Enter ID" required />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-black uppercase text-gray-400 block tracking-widest flex items-center gap-2">密碼 Password</label>
-                <input type="password" value={inputPassword} onChange={e => setInputPassword(e.target.value)} className="w-full bg-gray-50 border border-transparent px-4 py-3 text-sm font-bold text-black tracking-[0.6em] outline-none focus:border-black focus:bg-white transition-all" placeholder="****" required />
-              </div>
-            </div>
-            {loginError && <p className="text-red-500 text-[8px] font-black uppercase text-center tracking-widest">登錄失敗 (FAILED)</p>}
-            <button className="w-full bg-black text-white py-4 font-black text-[11px] tracking-[0.5em] hover:bg-[#bef264] hover:text-black transition-all shadow-xl uppercase active:scale-95">登入 LOGIN</button>
-          </form>
-        </div>
-      </div>
+      <AuthScreen 
+        onLogin={handleLogin} 
+        onRegister={handleRegister} 
+        loginError={loginError} 
+      />
     );
   }
 
   return (
     <div className="flex min-h-screen bg-white">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} />
-      <main className="flex-1 px-8 md:px-16 py-10 pb-32 overflow-x-hidden relative">
+      <main className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 overflow-x-hidden relative">
         <div className="animate-in fade-in duration-500">
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} isDbConnected={dbConnected} />}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} />}
@@ -178,7 +189,7 @@ const App: React.FC = () => {
           {activeTab === 'admin' && <AdminPanel />}
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} />}
         </div>
-        {isSyncing && <div className="fixed top-8 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-50 shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
+        {isSyncing && <div className="fixed top-8 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
       </main>
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
     </div>

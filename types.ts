@@ -9,12 +9,12 @@ export enum FitnessGoal {
 }
 
 export const GoalMetadata = {
-  [FitnessGoal.FAT_LOSS]: { label: '極限減脂', focus: '熱量赤字與 NEAT' },
-  [FitnessGoal.HYPERTROPHY]: { label: '鋼鐵增肌', focus: '漸進式超負荷與蛋白質' },
+  [FitnessGoal.FAT_LOSS]: { label: '極限減脂', focus: '熱量赤字與活動量' },
+  [FitnessGoal.HYPERTROPHY]: { label: '鋼鐵增肌', focus: '漸進式超負荷與營養' },
   [FitnessGoal.GOLDEN_RATIO]: { label: 'V型黃金比例', focus: '闊背肌與三角肌孤立' },
   [FitnessGoal.STRENGTH]: { label: '力量突破', focus: '大重量複合動作' },
   [FitnessGoal.ENDURANCE]: { label: '耐力與線條', focus: '訓練密度與循環訓練' },
-  [FitnessGoal.CUSTOM]: { label: '自訂戰略', focus: '用戶自定義目標' },
+  [FitnessGoal.CUSTOM]: { label: '自訂健身', focus: '用戶自定義目標' },
 };
 
 export interface UserMetrics {
@@ -39,7 +39,7 @@ export interface WorkoutLog {
   startTime: string;
   endTime: string;
   focus?: string;
-  feedback?: string; // This will store the Daily Performance Feedback
+  feedback?: string; 
   durationMinutes?: number;
   exercises: WorkoutExercise[];
 }
@@ -47,12 +47,14 @@ export interface WorkoutLog {
 export interface PhysiqueRecord {
   id: string;
   date: string;
-  image: string; // Base64
+  image: string; 
   analysis: string;
 }
 
 export interface UserProfile {
   name: string;
+  email?: string;
+  gender: 'M' | 'F' | 'O';
   age: number;
   height: number;
   goal: FitnessGoal;
@@ -61,8 +63,7 @@ export interface UserProfile {
   customEquipmentPool?: string[];
   lastLoginDate?: string;
   loginStreak?: number;
-  // Security fields
-  memberId?: string;
+  memberId: string;
   password?: string;
 }
 
