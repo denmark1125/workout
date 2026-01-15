@@ -1,36 +1,28 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
+import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "./types";
 
 export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const meta = GoalMetadata[profile.goal];
   const goalStr = profile.goal === FitnessGoal.CUSTOM 
     ? `自定義目標：${profile.customGoalText}` 
-    : `${meta.label} (焦點：${meta.focus})`;
-
-  const personaInstructions = profile.gender === 'F' 
-    ? "語氣應偏向鼓勵、科學且注重美感比例，避免過於粗魯或純力量導向的措辭。"
-    : "語氣應保持極度冷靜、數據化、且帶有軍事化戰略感。";
+    : `${GoalMetadata[profile.goal].label} (${GoalMetadata[profile.goal].focus})`;
 
   const equipmentStr = profile.equipment?.length 
     ? `可用器材清單：${profile.equipment.join(', ')}`
-    : "無特定器材，請提供一般性建議。";
+    : "未指定器械，請提供一般性建議。";
 
   const prompt = `
-    你是一位極度專業且冷靜的健身戰略主導官。正在為執行者進行「視覺診斷」。
+    你是一位極度專業且冷靜的健身教練，正在進行「視覺診斷」。
     
     [用戶基本資料]
-    - 性別：${profile.gender === 'F' ? '女性' : '男性'}
     - 目標：${goalStr}
-    - 訓練風格：${profile.trainingPreference || '均衡訓練'}
     - 身高：${profile.height}cm，年齡：${profile.age}歲
     - ${equipmentStr}
     
-    [輸出規範]
-    ${personaInstructions}
+    [輸出格式規範]
     1. 使用「繁體中文」。全程使用「條列式」。
-    2. 結構：🔍 視覺特徵觀察、⚠️ 比例/代謝優化點、🛠️ 具體行動戰略 (包含有氧與阻力分配建議)、💡 教練戰略叮嚀。
+    2. 結構：🔍 視覺特徵觀察、⚠️ 比例弱點分析、🛠️ 動作優化清單、💡 教練戰略叮嚀。
   `;
 
   const imagePart = {
@@ -41,6 +33,7 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
   };
 
   try {
+    // Corrected model name to gemini-3-flash-preview and contents structure
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview", 
       contents: { parts: [imagePart, { text: prompt }] },
@@ -59,33 +52,35 @@ export const generateWeeklyReport = async (
   physiqueRecords: PhysiqueRecord[]
 ) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const meta = GoalMetadata[profile.goal];
   
   const recentMetrics = metrics.slice(-7).map(m => 
     `- ${m.date}: 體重 ${m.weight}kg, 體脂 ${m.bodyFat}%, 肌肉 ${m.muscleMass}kg`
   ).join('\n');
 
   const recentLogs = logs.slice(-7).map(log => 
-    `- ${log.date}: 訓練焦點[${log.focus || '全方位'}], 回饋[${log.feedback || '正常'}]`
+    `- ${log.date}: 時長 ${log.durationMinutes}min, 焦點[${log.focus || '全方位'}], 訓練況狀/回饋[${log.feedback || '正常'}], 動作內容[${log.exercises.map(e => `${e.name} ${e.weight}kg`).join(', ')}]`
+  ).join('\n');
+
+  const recentPhysique = physiqueRecords.slice(0, 3).map(rec => 
+    `- ${rec.date} 視覺診斷分析摘要: ${rec.analysis.substring(0, 200)}`
   ).join('\n');
 
   const prompt = `
-    你是一位 AI 健身戰略主導官。請針對以下數據生成「戰略週報」。
+    你是一位領先全球的健身戰略主導官 (AI Chief Strategist)。請根據以下數據生成「終極戰略週報」。
     
-    [生理數據矩陣]
-    - 用戶性別：${profile.gender}
-    - 目標：${meta.label} (核心：${meta.focus})
-    - 體標趨勢：\n${recentMetrics}
-    - 訓練紀錄：\n${recentLogs}
+    [生理矩陣數據]
+    - 目標：${profile.goal}
+    - 體標變化趨勢：\n${recentMetrics}
+    - 訓練日誌與回饋：\n${recentLogs}
+    - 視覺診斷歷史：\n${recentPhysique || "無紀錄"}
     
     [要求]
-    1. 繁體中文。請根據目標調整建議重點：
-       - 若為「減脂/塑形」，應加強熱量缺口與活動量平衡的分析。
-       - 若為「增肌/力量」，應針對訓練重量與恢復進行點評。
-    2. 結構：### 🛡️ 戰略現況、### ⚖️ 執行優化、### 🥑 營養/代謝建議、### ⚠️ 警語。
+    1. 繁體中文，專業 authoritative。
+    2. 包含：### 🛡️ 戰略評估、### ⚖️ 動作優化、### 🥑 能量代謝建議、### ⚠️ 執行警語。
   `;
 
   try {
+    // Corrected model name and passed prompt string directly to contents
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,

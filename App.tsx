@@ -9,6 +9,7 @@ import WeeklyReport from './components/WeeklyReport';
 import Settings from './components/Settings';
 import TrainingJournal from './components/TrainingJournal';
 import AdminPanel from './components/AdminPanel';
+import RewardVault from './components/RewardVault'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
 import { getLocalTimestamp } from './utils/calculations';
@@ -35,7 +36,9 @@ const App: React.FC = () => {
     name: 'User', age: 25, height: 175, gender: 'M', goal: FitnessGoal.HYPERTROPHY,
     equipment: [], customEquipmentPool: [], customGoalText: '',
     loginStreak: 1, lastLoginDate: '',
-    memberId: 'member01', password: '0000'
+    memberId: 'member01', password: '0000',
+    collectedRewardIds: [],
+    unlockedAchievementIds: []
   });
 
   const [metrics, setMetrics] = useState<UserMetrics[]>([]);
@@ -104,23 +107,17 @@ const App: React.FC = () => {
 
   const handleLogin = async (id: string, pass: string) => {
     const mid = id.trim().toLowerCase();
-    
-    // Check cloud database first for password (including admin_roots)
     const remoteProfile = await fetchFromCloud('profiles', mid);
-    
     if (remoteProfile) {
       if (remoteProfile.password === pass) {
         executeAuth(mid);
         return;
       }
     }
-
-    // Hardcoded fallback for fresh setup or before admin changes pass
     if (mid === 'admin_roots' && pass === '8888') {
       executeAuth('admin_roots');
       return;
     }
-
     setLoginError(true);
   };
 
@@ -132,14 +129,12 @@ const App: React.FC = () => {
         date: getLocalTimestamp(),
         weight: initialWeight,
         bodyFat: 18, 
-        muscleMass: initialWeight * 0.45 
+        muscleMass: 0 
       };
-      
       await Promise.all([
         syncToCloud('profiles', newProfile, newProfile.memberId),
         syncToCloud('metrics', [initialMetric], newProfile.memberId)
       ]);
-      
       setProfile(newProfile);
       setMetrics([initialMetric]);
       executeAuth(newProfile.memberId);
@@ -168,13 +163,7 @@ const App: React.FC = () => {
   };
 
   if (!isAuthenticated) {
-    return (
-      <AuthScreen 
-        onLogin={handleLogin} 
-        onRegister={handleRegister} 
-        loginError={loginError} 
-      />
-    );
+    return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} loginError={loginError} />;
   }
 
   return (
@@ -182,16 +171,27 @@ const App: React.FC = () => {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} />
       <main className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 overflow-x-hidden relative">
         <div className="animate-in fade-in duration-500">
-          {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} isDbConnected={dbConnected} />}
+          {activeTab === 'dashboard' && (
+            <DataEngine 
+              profile={profile} 
+              metrics={metrics} 
+              logs={logs} 
+              onAddMetric={(m) => setMetrics([...metrics, m])} 
+              onUpdateMetrics={setMetrics}
+              onUpdateProfile={setProfile} 
+              isDbConnected={dbConnected} 
+            />
+          )}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} />}
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} />}
           {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} />}
+          {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} />}
         </div>
         {isSyncing && <div className="fixed top-8 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
       </main>
-      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} isAdmin={isAdmin} />
     </div>
   );
 };
