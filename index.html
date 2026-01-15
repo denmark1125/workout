@@ -1,76 +1,84 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>The Matrix - AI Physique Strategist</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>The Matrix - AI 體態戰略家</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-main: #ffffff;
       --matrix-green: #bef264;
-      --text-gray: #888888;
-      --grid-line: #f5f5f5;
+      --titanium-gray: #f8fafc;
+    }
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+      position: relative;
     }
     body {
-      font-family: 'Inter', sans-serif;
-      background-color: var(--bg-main);
+      font-family: 'Noto Sans TC', 'Inter', sans-serif;
+      background-color: #ffffff;
       color: #000;
       background-image: 
-        linear-gradient(var(--grid-line) 1px, transparent 1px),
-        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-      background-size: 80px 80px;
+        linear-gradient(rgba(240, 240, 240, 0.5) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(240, 240, 240, 0.5) 1px, transparent 1px);
+      background-size: 60px 60px;
       background-attachment: fixed;
       -webkit-font-smoothing: antialiased;
     }
     .mono { font-family: 'JetBrains Mono', monospace; }
-    .matrix-card {
-      background: white;
-      border: 1px solid #eeeeee;
-      padding: 24px;
-      transition: all 0.3s ease;
+    
+    /* 玻璃感卡片 */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid #f1f5f9;
     }
-    .matrix-card:hover {
-      border-color: #000;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-    }
-    .status-tag {
-      font-size: 10px;
-      font-weight: 900;
-      padding: 2px 8px;
-      border-radius: 99px;
-      text-transform: uppercase;
-    }
+
     .input-clean {
-      border-bottom: 2px solid #eee;
-      padding: 8px 0;
-      font-size: 24px;
+      border-bottom: 2px solid #f1f5f9;
+      padding: 10px 0;
+      font-size: 1.5rem;
       font-weight: 900;
       width: 100%;
       outline: none;
-      transition: border-color 0.2s;
+      transition: all 0.3s;
+      background: transparent;
     }
     .input-clean:focus {
       border-color: var(--matrix-green);
+      transform: translateY(-2px);
     }
+    
+    @keyframes scanline {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+    .scanline::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(to bottom, transparent, rgba(190, 242, 100, 0.05), transparent);
+      animation: scanline 4s linear infinite;
+      pointer-events: none;
+    }
+
     .sidebar-active {
       background-color: var(--matrix-green);
       color: #000;
-      position: relative;
+      box-shadow: 10px 0 30px rgba(190, 242, 100, 0.1);
     }
-    .sidebar-active::after {
-      content: '';
-      position: absolute;
-      right: 0; top: 0; bottom: 0;
-      width: 4px; background: #000;
+    
+    input[type="time"]::-webkit-calendar-picker-indicator { display:none; }
+
+    /* 修復行動端滑動可能造成的溢出 */
+    * {
+      box-sizing: border-box;
     }
-    h1, h2 { letter-spacing: -0.04em; }
-    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
   </style>
   <script type="importmap">
 {
@@ -85,7 +93,6 @@
     "firebase/firestore": "https://esm.sh/firebase@11.1.0/firestore",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "@firebase/app": "https://esm.sh/@firebase/app@^0.14.7",
     "firebase/": "https://esm.sh/firebase@^12.8.0/"
   }
 }

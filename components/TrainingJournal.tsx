@@ -15,10 +15,9 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
   const [exerciseInput, setExerciseInput] = useState({ name: '', weight: '', reps: '', sets: '1' });
   const [focusArea, setFocusArea] = useState('');
   
-  const [startTime, setStartTime] = useState("17:34");
-  const [endTime, setEndTime] = useState("18:34");
+  const [startTime, setStartTime] = useState("17:00");
+  const [endTime, setEndTime] = useState("18:00");
 
-  // 日曆邏輯
   const daysInMonth = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -57,24 +56,22 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
   };
 
   return (
-    <div className="animate-in fade-in duration-700 max-w-7xl mx-auto">
-      <div className="flex flex-col lg:flex-row gap-1 bg-gray-100 border border-gray-100 shadow-2xl">
+    <div className="animate-in fade-in duration-700 max-w-7xl mx-auto space-y-12 pb-32 px-2 md:px-0 overflow-hidden">
+      <div className="flex flex-col lg:flex-row bg-white border border-gray-100 shadow-2xl rounded-sm overflow-hidden">
         
         {/* 左側日曆 */}
-        <div className="bg-white p-12 lg:w-[400px]">
-          <div className="flex items-center justify-between mb-12">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-              {currentMonth.getFullYear()}年{currentMonth.getMonth() + 1}月
-            </h3>
+        <div className="lg:w-[400px] p-6 md:p-12 border-r border-gray-100 bg-[#fcfcfc]/50">
+          <div className="flex items-center justify-between mb-8 md:mb-14">
+            <h3 className="text-xl font-black">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h3>
             <div className="flex gap-2">
-              <button onClick={handlePrevMonth} className="p-2 border border-gray-100 hover:bg-gray-50 transition-all"><ChevronLeft size={14} /></button>
-              <button onClick={handleNextMonth} className="p-2 border border-gray-100 hover:bg-gray-50 transition-all"><ChevronRight size={14} /></button>
+              <button onClick={handlePrevMonth} className="w-9 h-9 flex items-center justify-center border border-gray-100 hover:bg-white transition-all"><ChevronLeft size={18} /></button>
+              <button onClick={handleNextMonth} className="w-9 h-9 flex items-center justify-center border border-gray-100 hover:bg-white transition-all"><ChevronRight size={18} /></button>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 text-center gap-1">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-              <div key={d} className="text-[8px] font-black text-gray-300 py-4">{d}</div>
+          <div className="grid grid-cols-7 text-center gap-y-1">
+            {['日', '一', '二', '三', '四', '五', '六'].map(d => (
+              <div key={d} className="text-[10px] font-black text-gray-300 tracking-widest uppercase mb-2">{d}</div>
             ))}
             {Array.from({ length: daysInMonth.firstDay }).map((_, i) => <div key={`empty-${i}`} />)}
             {Array.from({ length: daysInMonth.days }).map((_, i) => {
@@ -85,8 +82,8 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
                 <button
                   key={d}
                   onClick={() => setSelectedDate(dateStr)}
-                  className={`aspect-square flex items-center justify-center text-[10px] font-black transition-all ${
-                    isSelected ? 'bg-black text-white' : 'text-gray-400 hover:bg-gray-50'
+                  className={`w-10 h-10 flex items-center justify-center mx-auto text-[13px] font-black transition-all rounded-sm ${
+                    isSelected ? 'bg-black text-white shadow-xl scale-110 z-10' : 'text-gray-400 hover:text-black hover:bg-gray-100'
                   }`}
                 >
                   {d}
@@ -97,121 +94,77 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
         </div>
 
         {/* 右側表單 */}
-        <div className="bg-white p-12 flex-1">
-          <div className="flex items-start justify-between mb-12">
-            <div>
-              <div className="flex items-center gap-4 mb-2">
-                <div className="w-10 h-10 bg-black text-lime-400 flex items-center justify-center">
-                  <Plus size={20} />
-                </div>
-                <h2 className="text-2xl font-black tracking-tighter uppercase">快速登錄 (QUICK LOG)</h2>
+        <div className="flex-1 p-6 md:p-16 space-y-12">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-6">
+            <div className="flex items-center gap-6">
+              <div className="w-12 h-12 bg-black text-lime-400 flex items-center justify-center shadow-2xl relative">
+                 <Plus size={28} />
               </div>
-              <p className="text-[8px] font-black text-gray-300 uppercase tracking-[0.4em] pl-14">Tactical Entry</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">Duration</p>
-              <p className="text-xl font-black font-mono">{duration} 分鐘</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <div>
-              <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-3 block">Start Time</label>
-              <div className="flex items-center gap-4 border-b-2 border-gray-50 pb-2">
-                <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="text-2xl font-black outline-none w-full font-mono" />
-                <Clock className="text-gray-200" size={16} />
+              <div>
+                <h2 className="text-2xl md:text-4xl font-black tracking-tighter uppercase leading-none">快速登錄 <span className="text-gray-200">QUICK LOG</span></h2>
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.5em] mt-2">Data Input Module</p>
               </div>
             </div>
-            <div>
-              <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-3 block">End Time</label>
-              <div className="flex items-center gap-4 border-b-2 border-gray-50 pb-2">
-                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="text-2xl font-black outline-none w-full font-mono" />
-                <Clock className="text-gray-200" size={16} />
-              </div>
-            </div>
-            <div>
-              <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-3 block">Focus</label>
-              <div className="flex items-center gap-4 border-b-2 border-gray-50 pb-2">
-                <input placeholder="Muscle group..." value={focusArea} onChange={e => setFocusArea(e.target.value)} className="text-xl font-black outline-none w-full" />
-                <Target className="text-gray-200" size={16} />
+            <div className="border-l-2 sm:border-l-0 sm:border-r-2 border-lime-400 pl-6 sm:pl-0 sm:pr-6 py-1">
+              <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Duration</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-black font-mono leading-none tracking-tighter">{duration}</span>
+                <span className="text-[10px] font-black text-gray-900 uppercase">min</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-gray-50/50 p-8 border border-gray-100 mb-8">
-            <div className="grid grid-cols-12 gap-4 mb-8">
-              <div className="col-span-12 md:col-span-5">
-                <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-3">動作 (EXERCISE)</p>
+          <div className="grid grid-cols-2 md:grid-cols-12 gap-8 border-b border-gray-100 pb-8">
+            <div className="col-span-1 md:col-span-3 space-y-2">
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">開始時段</label>
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="text-xl font-black outline-none w-full font-mono bg-transparent border-b border-gray-50 pb-1" />
+            </div>
+            <div className="col-span-1 md:col-span-3 space-y-2">
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">結束時段</label>
+              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="text-xl font-black outline-none w-full font-mono bg-transparent border-b border-gray-50 pb-1" />
+            </div>
+            <div className="col-span-2 md:col-span-6 space-y-2">
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">訓練焦點 Target</label>
+              <input placeholder="輸入部位..." value={focusArea} onChange={e => setFocusArea(e.target.value)} className="text-lg font-black outline-none w-full bg-transparent border-b border-gray-50 pb-1" />
+            </div>
+          </div>
+
+          {/* 動作矩陣輸入 */}
+          <div className="bg-[#fcfcfc] border border-gray-100 p-6 md:p-10 space-y-10 shadow-inner rounded-sm overflow-hidden">
+            <div className="space-y-8">
+              <div className="w-full">
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">動作 Exercise_Name</p>
                 <input 
-                  placeholder="Bench Press" 
+                  placeholder="例如：槓鈴臥推..." 
                   value={exerciseInput.name} 
                   onChange={e => setExerciseInput({...exerciseInput, name: e.target.value})}
-                  className="w-full p-4 bg-white border border-gray-100 text-sm font-black outline-none focus:border-black" 
+                  className="w-full h-14 bg-white border border-gray-100 px-6 text-lg font-black outline-none focus:border-black shadow-sm" 
                 />
               </div>
-              <div className="col-span-4 md:col-span-2">
-                <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-3">重量</p>
-                <input 
-                  placeholder="KG" 
-                  value={exerciseInput.weight}
-                  onChange={e => setExerciseInput({...exerciseInput, weight: e.target.value})}
-                  className="w-full p-4 bg-white border border-gray-100 text-center text-sm font-black outline-none focus:border-black" 
-                />
-              </div>
-              <div className="col-span-4 md:col-span-2">
-                <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-3">次數</p>
-                <input 
-                  placeholder="REPS" 
-                  value={exerciseInput.reps}
-                  onChange={e => setExerciseInput({...exerciseInput, reps: e.target.value})}
-                  className="w-full p-4 bg-white border border-gray-100 text-center text-sm font-black outline-none focus:border-black" 
-                />
-              </div>
-              <div className="col-span-4 md:col-span-3">
-                <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-3">組數</p>
-                <input 
-                  placeholder="1" 
-                  value={exerciseInput.sets}
-                  onChange={e => setExerciseInput({...exerciseInput, sets: e.target.value})}
-                  className="w-full p-4 bg-white border border-gray-100 text-center text-sm font-black outline-none focus:border-black" 
-                />
+              
+              <div className="grid grid-cols-3 gap-3 md:gap-6">
+                <div>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Weight</p>
+                  <input type="number" placeholder="0" value={exerciseInput.weight} onChange={e => setExerciseInput({...exerciseInput, weight: e.target.value})} className="w-full h-14 bg-white border border-gray-100 text-center text-lg font-black outline-none focus:border-black font-mono" />
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Reps</p>
+                  <input type="number" placeholder="0" value={exerciseInput.reps} onChange={e => setExerciseInput({...exerciseInput, reps: e.target.value})} className="w-full h-14 bg-white border border-gray-100 text-center text-lg font-black outline-none focus:border-black font-mono" />
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Sets</p>
+                  <input type="number" placeholder="1" value={exerciseInput.sets} onChange={e => setExerciseInput({...exerciseInput, sets: e.target.value})} className="w-full h-14 bg-white border border-gray-100 text-center text-lg font-black outline-none focus:border-black font-mono" />
+                </div>
               </div>
             </div>
 
             <button 
               onClick={handleCommit}
-              className="w-full bg-black text-white py-4 font-black text-[10px] tracking-[0.4em] uppercase hover:bg-lime-400 hover:text-black transition-all"
+              className="w-full bg-black text-white py-5 md:py-6 font-black text-xs tracking-[0.6em] uppercase hover:bg-lime-400 hover:text-black transition-all shadow-xl active:scale-95"
             >
-              COMMIT SESSION
+              提交 COMMIT_NODE
             </button>
           </div>
-        </div>
-      </div>
-
-      <div className="mt-16">
-        <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-4 mb-8">
-          ARCHIVE <span className="text-gray-200">→</span>
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 bg-gray-100 border border-gray-100 shadow-xl">
-          {logs.slice().reverse().map(log => (
-            <div key={log.id} className="bg-white p-8 group">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <p className="text-[8px] font-black text-gray-300 mb-1">{log.date}</p>
-                  <p className="text-lg font-black uppercase tracking-tight">{log.focus || 'GENERAL'}</p>
-                </div>
-                <button onClick={() => onDeleteLog(log.id)} className="text-gray-100 group-hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-              </div>
-              <div className="space-y-2">
-                {log.exercises.map((ex, i) => (
-                  <div key={i} className="flex justify-between text-[10px] font-bold border-b border-gray-50 pb-2">
-                    <span className="text-gray-400 uppercase">{ex.name}</span>
-                    <span className="font-mono">{ex.weight}K / {ex.reps}R / {ex.sets}S</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>

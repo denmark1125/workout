@@ -2,16 +2,17 @@
 import React, { useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import { UserMetrics, UserProfile, FitnessGoal, GoalMetadata } from '../types';
-import { calculateMatrix, getRadarData } from '../utils/calculations';
-import { AlertCircle, Zap } from 'lucide-react';
+import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus } from '../utils/calculations';
+import { Zap, Activity, Shield, Award, ChevronRight } from 'lucide-react';
 
 interface DataEngineProps {
   profile: UserProfile;
   metrics: UserMetrics[];
   onAddMetric: (m: UserMetrics) => void;
+  isDbConnected: boolean;
 }
 
-const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric }) => {
+const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, isDbConnected }) => {
   const latest = metrics[metrics.length - 1] || { weight: 75, bodyFat: 18, muscleMass: 35, date: new Date().toISOString() };
   const calculated = calculateMatrix(profile, latest as UserMetrics);
   const radarData = getRadarData(profile, latest as UserMetrics, calculated);
@@ -32,49 +33,85 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric }
     }, 800);
   };
 
+  const bmiStatus = getBMIStatus(calculated.bmi);
+  const ffmiStatus = getFFMIStatus(calculated.ffmi);
+
+  const statCards = [
+    { id: '01', label: 'BMI 指數', value: calculated.bmi.toFixed(1), icon: <Activity size={16} />, desc: '身體質量比', status: bmiStatus },
+    { id: '02', label: 'BMR 代謝', value: `${Math.round(calculated.bmr)}`, icon: <Zap size={16} />, desc: '每日靜態熱量', status: null },
+    { id: '03', label: 'FFMI 指數', value: calculated.ffmi.toFixed(1), icon: <Shield size={16} />, desc: '除脂體重指數', status: ffmiStatus },
+    { id: '04', label: '戰略評分', value: Math.round(calculated.score), icon: <Award size={16} />, desc: '綜合體態評估', status: { label: '卓越', color: 'border-lime-200 text-lime-500 bg-lime-50/30' } },
+  ];
+
   return (
-    <div className="animate-in fade-in duration-700">
-      {/* 頂部導航資訊 */}
-      <div className="flex justify-between items-start mb-16 border-b border-gray-100 pb-6">
-        <div className="flex gap-16">
+    <div className="animate-in fade-in duration-700 space-y-10 md:space-y-16">
+      {/* 系統狀態頭部 */}
+      <div className="flex flex-col md:flex-row justify-between items-start border-b border-gray-100 pb-8 gap-8">
+        <div className="flex gap-10 md:gap-16">
           <div className="space-y-1">
-            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">系統狀態 (SYSTEM STATUS)</p>
-            <p className="text-[10px] font-black flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-lime-400 animate-pulse"></span> 運作正常 (NOMINAL_FLOW)
-            </p>
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">System Status</p>
+            <div className={`flex items-center gap-2 text-[11px] font-bold ${isDbConnected ? 'text-black' : 'text-red-500'}`}>
+              <span className={`w-2 h-2 rounded-full ${isDbConnected ? 'bg-lime-400 shadow-[0_0_8px_rgba(190,242,100,1)]' : 'bg-red-500'}`}></span> 
+              {isDbConnected ? 'LINK_ESTABLISHED' : 'LINK_FAILURE'}
+            </div>
           </div>
-          <div className="space-y-1 border-l border-gray-100 pl-16">
-            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">戰略目標 (TACTICAL OBJECTIVE)</p>
-            <p className="text-[10px] font-black">{GoalMetadata[profile.goal].label}</p>
+          <div className="space-y-1 border-l border-gray-100 pl-10 md:pl-16">
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Active Goal</p>
+            <p className="text-[11px] font-black uppercase tracking-tight">{profile.goal === FitnessGoal.CUSTOM ? profile.customGoalText || 'Custom' : GoalMetadata[profile.goal].label}</p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-[10px] font-mono text-gray-300">2026/1/15 // GMT+8</p>
+        <div className="hidden md:block text-right">
+          <p className="text-[10px] font-mono text-gray-300 uppercase font-bold tracking-widest">Node_Matrix // {new Date().toLocaleDateString()}</p>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-12">
-        {/* 左側內容區 */}
+      <div className="flex flex-col xl:flex-row gap-12">
         <div className="flex-1 space-y-12">
-          <div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] mb-2">PHYSIOLOGICAL MODULE</p>
-            <h2 className="text-6xl font-black tracking-tighter uppercase leading-none">Data Engine</h2>
+          {/* 優化後的標題 */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em]">PHYSIOLOGICAL MODULE</p>
+            <h2 className="text-4xl md:text-6xl font-black tracking-tighter uppercase leading-none break-words">數據核心 <span className="text-gray-200 text-3xl md:text-4xl block md:inline md:ml-4">DATA ENGINE</span></h2>
           </div>
 
-          <div className="relative bg-gray-50/50 rounded-sm border border-gray-100 p-12 min-h-[500px] flex items-center justify-center overflow-hidden">
-            <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] select-none pointer-events-none">
-              <span className="text-[18rem] font-black">MAT</span>
-            </div>
-            <div className="w-full h-[400px] relative z-10">
+          {/* 重構的數據卡片 - 標籤弱化版 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            {statCards.map((card, i) => (
+              <div key={i} className="bg-white border border-gray-100 p-5 md:p-7 flex flex-col justify-between relative group hover:border-black transition-all shadow-sm overflow-hidden min-h-[160px]">
+                <span className="absolute top-4 right-5 text-[9px] font-mono text-gray-200 font-bold">[{card.id}]</span>
+                <div>
+                  <div className="flex items-center gap-2 text-gray-400 mb-4">
+                    {card.icon}
+                    <span className="text-[9px] font-black uppercase tracking-widest">{card.label}</span>
+                  </div>
+                  <div className="flex flex-col items-start gap-3">
+                    <span className="text-4xl md:text-5xl font-black tracking-tighter block leading-none">{card.value}</span>
+                    {card.status && (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-widest border ${card.status.color}`}>
+                        {card.status.label}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[8px] font-bold text-gray-300 uppercase mt-6 flex items-center gap-1.5">
+                  <ChevronRight size={8} /> {card.desc}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 雷達圖區域 */}
+          <div className="relative bg-[#fcfcfc] border border-gray-100 p-6 md:p-16 h-[400px] md:h-[550px] flex items-center justify-center overflow-hidden scanline">
+            <div className="absolute top-8 left-10 text-[10px] font-mono font-black text-gray-200">RADAR_VECTOR_SCAN</div>
+            <div className="w-full h-full relative z-10">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
-                  <PolarGrid stroke="#eee" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#000', fontSize: 12, fontWeight: 900 }} />
+                  <PolarGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#000', fontSize: 11, fontWeight: 900 }} />
                   <Radar
                     name="Physique"
                     dataKey="A"
                     stroke="#000"
-                    strokeWidth={2}
+                    strokeWidth={3}
                     fill="#bef264"
                     fillOpacity={0.6}
                   />
@@ -84,59 +121,46 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric }
           </div>
         </div>
 
-        {/* 右側側邊欄輸入 */}
-        <div className="w-full md:w-80 border-l border-gray-100 pl-12 space-y-12">
-          <div className="bg-black text-white p-6 relative">
-            <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Active Protocol</p>
-            <p className="text-sm font-black uppercase tracking-tight">{GoalMetadata[profile.goal].label}</p>
-            <div className="absolute top-4 right-4 text-lime-400">
-              <AlertCircle size={16} />
+        {/* 右側輸入 */}
+        <div className="w-full xl:w-96 space-y-8">
+          <div className="bg-black text-white p-10 relative overflow-hidden shadow-2xl">
+            <div className="absolute -right-6 -bottom-6 opacity-20 text-lime-400 rotate-12">
+              <Zap size={140} />
             </div>
+            <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] mb-3">Protocol Identity</p>
+            <p className="text-2xl font-black uppercase tracking-tighter">{profile.name || 'Anonymous'}</p>
+            <p className="text-[10px] text-lime-400 font-mono mt-2 uppercase tracking-widest">{GoalMetadata[profile.goal].label}</p>
           </div>
 
-          <div className="space-y-10">
-            <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">同步生理矩陣 (SYNCHRONIZE)</p>
-              <div className="w-8 h-1 bg-black"></div>
+          <form onSubmit={handleSubmit} className="bg-white border border-gray-100 p-10 space-y-10 shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-50 pb-6">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">數據同步 (SYNC_NODE)</p>
+              <div className="w-2 h-2 bg-lime-400 rounded-full animate-ping"></div>
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div>
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 block">體重 WEIGHT (KG)</label>
-                <input 
-                  type="number" step="0.1" 
-                  value={input.weight} 
-                  onChange={e => setInput({...input, weight: parseFloat(e.target.value)})}
-                  className="input-clean" 
-                />
-              </div>
-              <div>
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 block">體脂 BODY FAT (%)</label>
-                <input 
-                  type="number" step="0.1" 
-                  value={input.bodyFat} 
-                  onChange={e => setInput({...input, bodyFat: parseFloat(e.target.value)})}
-                  className="input-clean" 
-                />
-              </div>
-              <div>
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 block">肌肉 MUSCLE (KG)</label>
-                <input 
-                  type="number" step="0.1" 
-                  value={input.muscleMass} 
-                  onChange={e => setInput({...input, muscleMass: parseFloat(e.target.value)})}
-                  className="input-clean" 
-                />
-              </div>
+            
+            <div className="space-y-10">
+              {['weight', 'bodyFat', 'muscleMass'].map((key) => (
+                <div key={key}>
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3 block">
+                    {key === 'weight' ? '體重 Weight (kg)' : key === 'bodyFat' ? '體脂 Body Fat (%)' : '肌肉量 Muscle (kg)'}
+                  </label>
+                  <input 
+                    type="number" step="0.1" 
+                    value={(input as any)[key]} 
+                    onChange={e => setInput({...input, [key]: parseFloat(e.target.value) || 0})}
+                    className="input-clean !text-3xl" 
+                  />
+                </div>
+              ))}
 
               <button 
                 disabled={isSyncing}
-                className="w-full bg-black text-white py-4 font-black text-[10px] tracking-widest uppercase hover:bg-lime-400 hover:text-black transition-all"
+                className="w-full bg-black text-white py-6 font-black text-xs tracking-[0.6em] uppercase hover:bg-lime-400 hover:text-black transition-all shadow-xl active:scale-95 disabled:bg-gray-100"
               >
-                {isSyncing ? 'SYNCING...' : 'COMMIT CHANGES'}
+                {isSyncing ? '傳輸中...' : '提交同步 COMMIT'}
               </button>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
       </div>
     </div>
