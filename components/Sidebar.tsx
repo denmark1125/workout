@@ -1,15 +1,16 @@
 
 import React from 'react';
-import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, ShieldCheck, LogOut } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   memberId: string;
   isAdmin: boolean;
+  onLogout: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, isAdmin }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, isAdmin, onLogout }) => {
   const navItems = [
     { id: 'dashboard', label: '數據中心', icon: <LayoutDashboard size={18} /> },
     { id: 'journal', label: '訓練日誌', icon: <Dumbbell size={18} /> },
@@ -23,10 +24,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, is
     <div className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 h-screen sticky top-0 z-10">
       <div className="p-8">
         <div className="flex items-center gap-3 mb-1">
-          <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-black text-sm italic">M</div>
+          <div className="w-8 h-8 bg-black text-[#bef264] flex items-center justify-center font-black text-sm italic">M</div>
           <h1 className="text-xl font-black tracking-tighter">MATRIX</h1>
         </div>
-        <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest pl-11">Physique Intelligence</p>
+        <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest pl-11">Tactical Analysis</p>
       </div>
 
       <nav className="flex-1 mt-4">
@@ -46,13 +47,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, is
         ))}
       </nav>
 
-      <div className="p-8 border-t border-gray-50 bg-gray-50/50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-white border border-gray-200 flex items-center justify-center text-[8px] font-black text-gray-400">USR</div>
-          <div className="overflow-hidden">
-            <p className="text-[10px] font-black uppercase truncate">{memberId}</p>
-            <p className="text-[8px] text-gray-400 font-mono">V2.4 :: 待命 (STANDBY)</p>
+      <div className="p-6 border-t border-gray-50 bg-gray-50/30">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-7 h-7 bg-white border border-gray-200 flex items-center justify-center text-[7px] font-black text-gray-400 shrink-0">USR</div>
+            <div className="overflow-hidden">
+              <p className="text-[10px] font-black uppercase truncate text-black">{memberId}</p>
+              <p className="text-[7px] text-lime-600 font-mono font-bold tracking-widest">CONNECTED</p>
+            </div>
           </div>
+          <button 
+            onClick={onLogout}
+            className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+            title="登出 Disconnect"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
     </div>

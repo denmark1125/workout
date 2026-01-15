@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { WorkoutLog, WorkoutExercise } from '../types';
-import { ChevronLeft, ChevronRight, Plus, Clock, Target, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MessageSquare } from 'lucide-react';
 
 interface TrainingJournalProps {
   logs: WorkoutLog[];
@@ -14,6 +14,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [exerciseInput, setExerciseInput] = useState({ name: '', weight: '', reps: '', sets: '1' });
   const [focusArea, setFocusArea] = useState('');
+  const [dailyFeedback, setDailyFeedback] = useState('');
   
   const [startTime, setStartTime] = useState("17:00");
   const [endTime, setEndTime] = useState("18:00");
@@ -43,6 +44,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
       date: selectedDate,
       startTime, endTime,
       focus: focusArea,
+      feedback: dailyFeedback,
       durationMinutes: duration,
       exercises: [{
         id: Date.now().toString(),
@@ -53,25 +55,26 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
       }]
     });
     setExerciseInput({ name: '', weight: '', reps: '', sets: '1' });
+    setDailyFeedback('');
   };
 
   return (
-    <div className="animate-in fade-in duration-700 max-w-7xl mx-auto space-y-12 pb-32 px-2 md:px-0 overflow-hidden">
+    <div className="animate-in fade-in duration-700 max-w-7xl mx-auto space-y-8 md:space-y-12 pb-32 px-2 md:px-0 overflow-hidden">
       <div className="flex flex-col lg:flex-row bg-white border border-gray-100 shadow-2xl rounded-sm overflow-hidden">
         
         {/* 左側日曆 */}
-        <div className="lg:w-[400px] p-6 md:p-12 border-r border-gray-100 bg-[#fcfcfc]/50">
-          <div className="flex items-center justify-between mb-8 md:mb-14">
-            <h3 className="text-xl font-black">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h3>
+        <div className="lg:w-[350px] p-6 md:p-10 border-r border-gray-100 bg-[#fcfcfc]/50">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-lg font-black">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h3>
             <div className="flex gap-2">
-              <button onClick={handlePrevMonth} className="w-9 h-9 flex items-center justify-center border border-gray-100 hover:bg-white transition-all"><ChevronLeft size={18} /></button>
-              <button onClick={handleNextMonth} className="w-9 h-9 flex items-center justify-center border border-gray-100 hover:bg-white transition-all"><ChevronRight size={18} /></button>
+              <button onClick={handlePrevMonth} className="w-8 h-8 flex items-center justify-center border border-gray-100 hover:bg-white transition-all"><ChevronLeft size={16} /></button>
+              <button onClick={handleNextMonth} className="w-8 h-8 flex items-center justify-center border border-gray-100 hover:bg-white transition-all"><ChevronRight size={16} /></button>
             </div>
           </div>
 
           <div className="grid grid-cols-7 text-center gap-y-1">
             {['日', '一', '二', '三', '四', '五', '六'].map(d => (
-              <div key={d} className="text-[10px] font-black text-gray-300 tracking-widest uppercase mb-2">{d}</div>
+              <div key={d} className="text-[9px] font-black text-gray-300 tracking-widest uppercase mb-2">{d}</div>
             ))}
             {Array.from({ length: daysInMonth.firstDay }).map((_, i) => <div key={`empty-${i}`} />)}
             {Array.from({ length: daysInMonth.days }).map((_, i) => {
@@ -82,8 +85,8 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
                 <button
                   key={d}
                   onClick={() => setSelectedDate(dateStr)}
-                  className={`w-10 h-10 flex items-center justify-center mx-auto text-[13px] font-black transition-all rounded-sm ${
-                    isSelected ? 'bg-black text-white shadow-xl scale-110 z-10' : 'text-gray-400 hover:text-black hover:bg-gray-100'
+                  className={`w-9 h-9 flex items-center justify-center mx-auto text-[12px] font-black transition-all rounded-sm ${
+                    isSelected ? 'bg-black text-white shadow-lg scale-110 z-10' : 'text-gray-400 hover:text-black hover:bg-gray-100'
                   }`}
                 >
                   {d}
@@ -94,75 +97,91 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
         </div>
 
         {/* 右側表單 */}
-        <div className="flex-1 p-6 md:p-16 space-y-12">
-          <div className="flex flex-col sm:flex-row items-start justify-between gap-6">
-            <div className="flex items-center gap-6">
-              <div className="w-12 h-12 bg-black text-lime-400 flex items-center justify-center shadow-2xl relative">
-                 <Plus size={28} />
+        <div className="flex-1 p-6 md:p-12 space-y-10">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-6 border-b border-gray-50 pb-8">
+            <div className="flex items-center gap-5">
+              <div className="w-10 h-10 bg-black text-lime-400 flex items-center justify-center shadow-xl">
+                 <Plus size={24} />
               </div>
               <div>
-                <h2 className="text-2xl md:text-4xl font-black tracking-tighter uppercase leading-none">快速登錄 <span className="text-gray-200">QUICK LOG</span></h2>
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.5em] mt-2">Data Input Module</p>
+                <h2 className="text-2xl md:text-3xl font-black tracking-tighter uppercase leading-none">快速登錄 <span className="text-gray-200">QUICK LOG</span></h2>
+                <p className="text-[8px] font-black text-gray-400 uppercase tracking-[0.4em] mt-1">Data Input Module</p>
               </div>
             </div>
-            <div className="border-l-2 sm:border-l-0 sm:border-r-2 border-lime-400 pl-6 sm:pl-0 sm:pr-6 py-1">
-              <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Duration</p>
+            <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-1">
+              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Duration</p>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-black font-mono leading-none tracking-tighter">{duration}</span>
-                <span className="text-[10px] font-black text-gray-900 uppercase">min</span>
+                <span className="text-2xl font-black font-mono leading-none tracking-tighter">{duration}</span>
+                <span className="text-[9px] font-black text-gray-900 uppercase">min</span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-12 gap-8 border-b border-gray-100 pb-8">
-            <div className="col-span-1 md:col-span-3 space-y-2">
-              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">開始時段</label>
-              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="text-xl font-black outline-none w-full font-mono bg-transparent border-b border-gray-50 pb-1" />
+          {/* 時段輸入 - 修正截斷問題 */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-start">
+            <div className="sm:col-span-3 space-y-1.5">
+              <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest block">開始時段</label>
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="text-lg font-black outline-none w-full font-mono bg-gray-50 border-b border-gray-200 p-2" />
             </div>
-            <div className="col-span-1 md:col-span-3 space-y-2">
-              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">結束時段</label>
-              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="text-xl font-black outline-none w-full font-mono bg-transparent border-b border-gray-50 pb-1" />
+            <div className="sm:col-span-3 space-y-1.5">
+              <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest block">結束時段</label>
+              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="text-lg font-black outline-none w-full font-mono bg-gray-50 border-b border-gray-200 p-2" />
             </div>
-            <div className="col-span-2 md:col-span-6 space-y-2">
-              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">訓練焦點 Target</label>
-              <input placeholder="輸入部位..." value={focusArea} onChange={e => setFocusArea(e.target.value)} className="text-lg font-black outline-none w-full bg-transparent border-b border-gray-50 pb-1" />
+            <div className="sm:col-span-6 space-y-1.5">
+              <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest block">訓練焦點 Target</label>
+              <input placeholder="輸入部位 (如: 胸、背)..." value={focusArea} onChange={e => setFocusArea(e.target.value)} className="text-base font-black outline-none w-full bg-gray-50 border-b border-gray-200 p-2" />
             </div>
           </div>
 
           {/* 動作矩陣輸入 */}
-          <div className="bg-[#fcfcfc] border border-gray-100 p-6 md:p-10 space-y-10 shadow-inner rounded-sm overflow-hidden">
-            <div className="space-y-8">
-              <div className="w-full">
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">動作 Exercise_Name</p>
-                <input 
-                  placeholder="例如：槓鈴臥推..." 
-                  value={exerciseInput.name} 
-                  onChange={e => setExerciseInput({...exerciseInput, name: e.target.value})}
-                  className="w-full h-14 bg-white border border-gray-100 px-6 text-lg font-black outline-none focus:border-black shadow-sm" 
-                />
+          <div className="bg-[#fcfcfc] border border-gray-100 p-6 md:p-8 space-y-6 shadow-sm rounded-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2">主要動作 Exercise</p>
+                  <input 
+                    placeholder="例如：槓鈴臥推..." 
+                    value={exerciseInput.name} 
+                    onChange={e => setExerciseInput({...exerciseInput, name: e.target.value})}
+                    className="w-full h-11 bg-white border border-gray-100 px-4 text-sm font-black outline-none focus:border-black shadow-sm" 
+                  />
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1.5 text-center">Weight</p>
+                    <input type="number" placeholder="0" value={exerciseInput.weight} onChange={e => setExerciseInput({...exerciseInput, weight: e.target.value})} className="w-full h-11 bg-white border border-gray-100 text-center text-sm font-black outline-none focus:border-black font-mono" />
+                  </div>
+                  <div>
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1.5 text-center">Reps</p>
+                    <input type="number" placeholder="0" value={exerciseInput.reps} onChange={e => setExerciseInput({...exerciseInput, reps: e.target.value})} className="w-full h-11 bg-white border border-gray-100 text-center text-sm font-black outline-none focus:border-black font-mono" />
+                  </div>
+                  <div>
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1.5 text-center">Sets</p>
+                    <input type="number" placeholder="1" value={exerciseInput.sets} onChange={e => setExerciseInput({...exerciseInput, sets: e.target.value})} className="w-full h-11 bg-white border border-gray-100 text-center text-sm font-black outline-none focus:border-black font-mono" />
+                  </div>
+                </div>
               </div>
-              
-              <div className="grid grid-cols-3 gap-3 md:gap-6">
-                <div>
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Weight</p>
-                  <input type="number" placeholder="0" value={exerciseInput.weight} onChange={e => setExerciseInput({...exerciseInput, weight: e.target.value})} className="w-full h-14 bg-white border border-gray-100 text-center text-lg font-black outline-none focus:border-black font-mono" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Reps</p>
-                  <input type="number" placeholder="0" value={exerciseInput.reps} onChange={e => setExerciseInput({...exerciseInput, reps: e.target.value})} className="w-full h-14 bg-white border border-gray-100 text-center text-lg font-black outline-none focus:border-black font-mono" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Sets</p>
-                  <input type="number" placeholder="1" value={exerciseInput.sets} onChange={e => setExerciseInput({...exerciseInput, sets: e.target.value})} className="w-full h-14 bg-white border border-gray-100 text-center text-lg font-black outline-none focus:border-black font-mono" />
-                </div>
+
+              {/* 每日運動回饋 (Daily Training Feedback) */}
+              <div className="flex flex-col">
+                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <MessageSquare size={10} /> 訓練況狀/回饋 (選填)
+                </p>
+                <textarea 
+                  placeholder="例如：今日精神不錯、肩膀略有不適..."
+                  value={dailyFeedback}
+                  onChange={e => setDailyFeedback(e.target.value)}
+                  className="flex-1 bg-white border border-gray-100 p-4 text-xs font-bold outline-none focus:border-black resize-none min-h-[100px]"
+                />
               </div>
             </div>
 
             <button 
               onClick={handleCommit}
-              className="w-full bg-black text-white py-5 md:py-6 font-black text-xs tracking-[0.6em] uppercase hover:bg-lime-400 hover:text-black transition-all shadow-xl active:scale-95"
+              className="w-full bg-black text-white py-4 font-black text-[10px] tracking-[0.5em] uppercase hover:bg-lime-400 hover:text-black transition-all shadow-lg active:scale-95"
             >
-              提交 COMMIT_NODE
+              提交訓練日誌 COMMIT
             </button>
           </div>
         </div>

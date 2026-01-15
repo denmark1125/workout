@@ -39,7 +39,7 @@ export interface WorkoutLog {
   startTime: string;
   endTime: string;
   focus?: string;
-  feedback?: string;
+  feedback?: string; // This will store the Daily Performance Feedback
   durationMinutes?: number;
   exercises: WorkoutExercise[];
 }
@@ -59,6 +59,11 @@ export interface UserProfile {
   customGoalText?: string;
   equipment?: string[];
   customEquipmentPool?: string[];
+  lastLoginDate?: string;
+  loginStreak?: number;
+  // Security fields
+  memberId?: string;
+  password?: string;
 }
 
 export interface CalculatedData {
@@ -66,17 +71,4 @@ export interface CalculatedData {
   bmr: number;
   ffmi: number;
   score: number;
-}
-
-// --- 管理員系統新增 ---
-export interface LoginLog {
-  memberId: string;
-  timestamp: string;
-  userAgent: string;
-}
-
-export interface UserRegistryEntry {
-  memberId: string;
-  lastActive: string;
-  status: 'ACTIVE' | 'BANNED';
 }

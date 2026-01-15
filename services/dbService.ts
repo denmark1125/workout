@@ -1,5 +1,5 @@
-
-import { initializeApp, getApps, getApp } from 'firebase/app';
+// Use namespace import to resolve environment-specific module resolution issues with Firebase exports
+import * as firebaseApp from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -11,6 +11,9 @@ const firebaseConfig = {
   appId: process.env.FIREBASE_APP_ID || "1:649579159803:web:886b8bb1e56a0c2dda505e",
   measurementId: process.env.FIREBASE_MEASUREMENT_ID || "G-GXX10CEYPK"
 };
+
+// Destructure from the namespace to bypass potential missing type exports in certain environments
+const { initializeApp, getApps, getApp } = firebaseApp as any;
 
 // Use any for types to resolve environment-specific module resolution issues with Firebase exports
 let app: any;

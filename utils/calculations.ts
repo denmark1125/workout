@@ -6,19 +6,29 @@ export interface MatrixStatus {
   color: string;
 }
 
+export const getLocalTimestamp = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
+
 export const getBMIStatus = (bmi: number): MatrixStatus => {
-  if (bmi < 18.5) return { label: '過輕', color: 'border-blue-200 text-blue-400 bg-blue-50/30' };
-  if (bmi < 24) return { label: '標準', color: 'border-lime-200 text-lime-500 bg-lime-50/30' };
-  if (bmi < 27) return { label: '過重', color: 'border-orange-200 text-orange-400 bg-orange-50/30' };
-  return { label: '肥胖', color: 'border-red-200 text-red-400 bg-red-50/30' };
+  if (bmi < 18.5) return { label: '過輕', color: 'border-blue-200 text-blue-400 bg-blue-50/10' };
+  if (bmi < 24) return { label: '標準', color: 'border-lime-200 text-lime-500 bg-lime-50/10' };
+  if (bmi < 27) return { label: '過重', color: 'border-orange-200 text-orange-400 bg-orange-50/10' };
+  return { label: '肥胖', color: 'border-red-200 text-red-400 bg-red-50/10' };
 };
 
 export const getFFMIStatus = (ffmi: number): MatrixStatus => {
-  if (ffmi < 18) return { label: '一般', color: 'border-gray-200 text-gray-400 bg-gray-50/30' };
-  if (ffmi < 20) return { label: '體格', color: 'border-blue-100 text-blue-400 bg-blue-50/30' };
-  if (ffmi < 22) return { label: '精銳', color: 'border-lime-200 text-lime-500 bg-lime-50/30' };
-  if (ffmi < 25) return { label: '極限', color: 'border-purple-200 text-purple-400 bg-purple-50/30' };
-  return { label: '異常', color: 'border-red-200 text-red-400 bg-red-50/30' };
+  if (ffmi < 18) return { label: '一般', color: 'border-gray-200 text-gray-400 bg-gray-50/10' };
+  if (ffmi < 20) return { label: '體格', color: 'border-blue-100 text-blue-400 bg-blue-50/10' };
+  if (ffmi < 22) return { label: '精銳', color: 'border-lime-200 text-lime-500 bg-lime-50/10' };
+  if (ffmi < 25) return { label: '極限', color: 'border-purple-200 text-purple-400 bg-purple-50/10' };
+  return { label: '異常', color: 'border-red-200 text-red-400 bg-red-50/10' };
 };
 
 export const calculateMatrix = (profile: UserProfile, metric: UserMetrics): CalculatedData => {
