@@ -12,8 +12,9 @@ import { syncToCloud, fetchFromCloud, db } from './services/dbService';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [isCloudLoaded, setIsCloudLoaded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(true);
   
+  // 初始狀態立即從 LocalStorage 讀取，確保畫面秒開
   const [profile, setProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('matrix_profile');
     return saved ? JSON.parse(saved) : {
@@ -37,15 +38,14 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // 初始化：從雲端拉取最新數據
+  // 背景初始化：嘗試從雲端更新本地數據，但不阻擋渲染
   useEffect(() => {
-    const loadData = async () => {
+    const initializeCloudData = async () => {
+      if (!db) {
+        setIsSyncing(false);
+        return;
+      }
       try {
-        if (!db) {
-          setIsCloudLoaded(true);
-          return;
-        }
-        
         const [cloudProfile, cloudMetrics, cloudLogs, cloudPhysique] = await Promise.all([
           fetchFromCloud('profiles'),
           fetchFromCloud('metrics'),
@@ -57,40 +57,35 @@ const App: React.FC = () => {
         if (cloudMetrics) setMetrics(cloudMetrics);
         if (cloudLogs) setLogs(cloudLogs);
         if (cloudPhysique) setPhysiqueRecords(cloudPhysique);
-        
       } catch (e) {
-        console.error("雲端同步失敗，使用本地數據庫。", e);
+        console.warn("[Matrix] Cloud sync failed, staying in Local Mode.");
       } finally {
-        setIsCloudLoaded(true);
+        setIsSyncing(false);
       }
     };
-    loadData();
+    initializeCloudData();
   }, []);
 
-  // 當數據變更時，自動同步至本地與雲端
+  // 數據變動自動同步
   useEffect(() => {
-    if (!isCloudLoaded) return;
     localStorage.setItem('matrix_profile', JSON.stringify(profile));
-    syncToCloud('profiles', profile);
-  }, [profile, isCloudLoaded]);
+    if (!isSyncing) syncToCloud('profiles', profile);
+  }, [profile, isSyncing]);
 
   useEffect(() => {
-    if (!isCloudLoaded) return;
     localStorage.setItem('matrix_metrics', JSON.stringify(metrics));
-    syncToCloud('metrics', metrics);
-  }, [metrics, isCloudLoaded]);
+    if (!isSyncing) syncToCloud('metrics', metrics);
+  }, [metrics, isSyncing]);
 
   useEffect(() => {
-    if (!isCloudLoaded) return;
     localStorage.setItem('matrix_logs', JSON.stringify(logs));
-    syncToCloud('logs', logs);
-  }, [logs, isCloudLoaded]);
+    if (!isSyncing) syncToCloud('logs', logs);
+  }, [logs, isSyncing]);
 
   useEffect(() => {
-    if (!isCloudLoaded) return;
     localStorage.setItem('matrix_physique', JSON.stringify(physiqueRecords));
-    syncToCloud('physique', physiqueRecords);
-  }, [physiqueRecords, isCloudLoaded]);
+    if (!isSyncing) syncToCloud('physique', physiqueRecords);
+  }, [physiqueRecords, isSyncing]);
 
   const addMetric = (newMetric: UserMetrics) => setMetrics(prev => [...prev, newMetric]);
 
@@ -117,15 +112,6 @@ const App: React.FC = () => {
 
   const addPhysiqueRecord = (record: PhysiqueRecord) => setPhysiqueRecords(prev => [record, ...prev]);
 
-  if (!isCloudLoaded) {
-    return (
-      <div className="h-screen bg-[#fcfcfc] flex items-center justify-center flex-col">
-        <div className="w-12 h-12 border-4 border-gray-100 border-t-black rounded-full animate-spin mb-6"></div>
-        <p className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.5em]">Establishing Matrix Link...</p>
-      </div>
-    );
-  }
-
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <DataEngine profile={profile} metrics={metrics} onAddMetric={addMetric} />;
@@ -141,30 +127,30 @@ const App: React.FC = () => {
     <div className="flex min-h-screen bg-[#fcfcfc]">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-12 pb-32 md:pb-12">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-6 py-12 pb-32 md:pb-12">
         <div className="mb-12 hidden md:flex items-center justify-between border-b border-gray-100 pb-6">
           <div className="flex gap-8">
             <div className="flex flex-col">
-              <span className="text-[10px] text-gray-400 font-mono font-bold uppercase tracking-widest">系統狀態 (System Status)</span>
+              <span className="text-[10px] text-gray-400 font-mono font-bold uppercase tracking-widest">系統連線 (Network)</span>
               <span className="text-xs text-black font-black uppercase tracking-tighter mt-1 flex items-center gap-2">
-                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${db ? 'bg-[#bef264]' : 'bg-orange-500'}`}></div>
-                {db ? '雲端連線中 (NOMINAL)' : '本地模式 (LOCAL_ONLY)'}
+                <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-blue-400 animate-pulse' : (db ? 'bg-[#bef264]' : 'bg-orange-500')}`}></div>
+                {isSyncing ? '同步中 (SYNCING)' : (db ? '雲端模式 (CLOUD_READY)' : '本地模式 (LOCAL_ONLY)')}
               </span>
             </div>
             <div className="w-px h-10 bg-gray-100"></div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-gray-400 font-mono font-bold uppercase tracking-widest">戰略目標 (Tactical Objective)</span>
+              <span className="text-[10px] text-gray-400 font-mono font-bold uppercase tracking-widest">當前任務 (Protocol)</span>
               <span className="text-xs text-black font-black uppercase tracking-tighter mt-1">
-                {GoalMetadata[profile.goal].label}
+                {GoalMetadata[profile.goal]?.label || 'OPERATIONAL'}
               </span>
             </div>
           </div>
           <div className="text-[10px] text-gray-400 font-mono font-bold tracking-[0.3em]">
-            {new Date().toLocaleDateString()} // GMT+8
+            {new Date().toLocaleDateString()}
           </div>
         </div>
 
-        <div className="animate-in fade-in slide-in-from-bottom-6 duration-1000">
+        <div className="animate-in fade-in duration-500">
           {renderContent()}
         </div>
       </main>

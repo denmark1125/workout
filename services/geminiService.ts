@@ -3,6 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
 
 export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
+  // 修正：根據指南使用包含 apiKey 屬性的物件來初始化 GoogleGenAI
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const goalStr = profile.goal === FitnessGoal.CUSTOM 
     ? `自定義目標：${profile.customGoalText}` 
@@ -51,11 +52,13 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     },
   };
 
+  // 修正：使用 ai.models.generateContent 並傳遞模型名稱與內容物件
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: { parts: [imagePart, { text: prompt }] },
   });
 
+  // 直接獲取 .text 屬性，而非呼叫方法
   return response.text;
 };
 
@@ -65,6 +68,7 @@ export const generateWeeklyReport = async (
   logs: WorkoutLog[], 
   physiqueRecords: PhysiqueRecord[]
 ) => {
+  // 修正：根據指南使用包含 apiKey 屬性的物件來初始化 GoogleGenAI
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const recentMetrics = metrics.slice(-5).map(m => 
@@ -122,13 +126,15 @@ export const generateWeeklyReport = async (
     - (針對 ${GoalMetadata[profile.goal]?.label || '當前目標'} 的一項關鍵優化)
   `;
 
+  // 修正：將 contents 格式調整為單個字串，並設定推薦的最大 thinkingBudget 以獲取深度推理
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
-    contents: [{ parts: [{ text: prompt }] }],
+    contents: prompt,
     config: {
-      thinkingConfig: { thinkingBudget: 4000 }
+      thinkingConfig: { thinkingBudget: 32768 }
     }
   });
 
+  // 直接獲取 .text 屬性，而非呼叫方法
   return response.text;
 };

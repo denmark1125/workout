@@ -2,25 +2,30 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc, Firestore } from 'firebase/firestore';
 
-// 更新為您提供的新專案配置 (workout-app-20752)
+// 修正：使用 process.env 替代 import.meta.env 以解決 TypeScript 報錯並統一環境變數存取方式
 const firebaseConfig = {
-  apiKey: "AIzaSyAdr5J_-sf3Q486Wzmri3gYdOJLC-pMZEE",
-  authDomain: "workout-app-20752.firebaseapp.com",
-  projectId: "workout-app-20752",
-  storageBucket: "workout-app-20752.firebasestorage.app",
-  messagingSenderId: "649579159803",
-  appId: "1:649579159803:web:886b8bb1e56a0c2dda505e",
-  measurementId: "G-GXX10CEYPK"
+  apiKey: process.env.VITE_FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID,
+  measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 let db: Firestore | null = null;
 
 try {
-  // 安全初始化：如果已經初始化過則拿舊的，否則建立新的
-  const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-  db = getFirestore(app);
+  // 檢查變數是否成功讀取（Vercel 部署時請確保已在 Settings -> Environment Variables 設定這些變數）
+  if (firebaseConfig.apiKey) {
+    const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    db = getFirestore(app);
+    console.log("[Matrix DB] Firebase connected.");
+  } else {
+    console.warn("[Matrix DB] Missing API Key. Local fallback active.");
+  }
 } catch (error) {
-  console.error("[Matrix Cloud] Firebase 初始化發生錯誤:", error);
+  console.error("[Matrix DB] Init failed:", error);
 }
 
 export { db };
@@ -34,11 +39,10 @@ export const syncToCloud = async (collectionName: string, data: any) => {
     await setDoc(docRef, { 
       data, 
       updatedAt: new Date().toISOString(),
-      source: "The Matrix AI System"
+      client: "The Matrix System Core"
     });
-    console.log(`[Matrix Cloud] ${collectionName} 同步成功`);
   } catch (error) {
-    console.error(`[Matrix Cloud] ${collectionName} 同步失敗:`, error);
+    console.error(`[Cloud] Sync error:`, error);
   }
 };
 
@@ -49,7 +53,7 @@ export const fetchFromCloud = async (collectionName: string) => {
     const snap = await getDoc(docRef);
     return snap.exists() ? snap.data().data : null;
   } catch (error) {
-    console.error(`[Matrix Cloud] ${collectionName} 讀取失敗:`, error);
+    console.error(`[Cloud] Fetch error:`, error);
     return null;
   }
 };
