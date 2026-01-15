@@ -10,9 +10,11 @@ import Settings from './components/Settings';
 import TrainingJournal from './components/TrainingJournal';
 import AdminPanel from './components/AdminPanel';
 import RewardVault from './components/RewardVault'; 
+import DailyRewardModal from './components/DailyRewardModal';
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
-import { getLocalTimestamp } from './utils/calculations';
+import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
+import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
 import { Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -21,6 +23,10 @@ const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
   
+  // 獎勵領取狀態
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [pendingReward, setPendingReward] = useState<any>(null);
+
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
     return localStorage.getItem('matrix_active_user');
   });
@@ -36,7 +42,7 @@ const App: React.FC = () => {
     name: 'User', age: 25, height: 175, gender: 'M', goal: FitnessGoal.HYPERTROPHY,
     equipment: [], customEquipmentPool: [], customGoalText: '',
     loginStreak: 1, lastLoginDate: '',
-    memberId: 'member01', password: '0000',
+    memberId: '', password: '',
     collectedRewardIds: [],
     unlockedAchievementIds: []
   });
@@ -53,6 +59,7 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentMemberId]);
 
+  // 初始化雲端數據與檢查每日領取
   useEffect(() => {
     const initializeCloudData = async () => {
       if (!db || !isAuthenticated || !currentMemberId) return;
@@ -68,6 +75,15 @@ const App: React.FC = () => {
         if (p) {
           const today = new Date().toLocaleDateString('en-CA');
           let updatedProfile = { ...p };
+          
+          // --- 強化：每日獎勵領取攔截器 ---
+          const hasClaimedToday = updatedProfile.lastRewardClaimDate === today;
+          if (!hasClaimedToday) {
+             const rewardIndex = (updatedProfile.collectedRewardIds?.length || 0) % REWARDS_DATABASE.length;
+             setPendingReward(REWARDS_DATABASE[rewardIndex]);
+             setShowRewardModal(true);
+          }
+
           if (updatedProfile.lastLoginDate !== today) {
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
@@ -94,6 +110,33 @@ const App: React.FC = () => {
     initializeCloudData();
   }, [isAuthenticated, currentMemberId]);
 
+  // 監測成就解鎖邏輯
+  useEffect(() => {
+    if (!isAuthenticated || !currentMemberId || metrics.length === 0) return;
+    
+    const latestMetric = metrics[metrics.length - 1];
+    const calculated = calculateMatrix(profile, latestMetric);
+    const updatedCollected = [...(profile.collectedRewardIds || [])];
+    let changed = false;
+
+    // 成就 1: 健身評分突破 80
+    if (calculated.score >= 80 && !updatedCollected.includes(ACHIEVEMENT_REWARDS['high_score'].id)) {
+      updatedCollected.push(ACHIEVEMENT_REWARDS['high_score'].id);
+      changed = true;
+    }
+
+    const totalMinutes = logs.reduce((acc, curr) => acc + (curr.durationMinutes || 0), 0);
+    if (totalMinutes >= 600 && !updatedCollected.includes(ACHIEVEMENT_REWARDS['long_train_1h'].id)) {
+      updatedCollected.push(ACHIEVEMENT_REWARDS['long_train_1h'].id);
+      changed = true;
+    }
+
+    if (changed) {
+      setProfile(prev => ({ ...prev, collectedRewardIds: updatedCollected }));
+    }
+  }, [metrics, logs, isAuthenticated]);
+
+  // 自動同步回雲端
   useEffect(() => {
     if (!isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
     const timer = setTimeout(() => {
@@ -104,6 +147,21 @@ const App: React.FC = () => {
     }, 2000);
     return () => clearTimeout(timer);
   }, [profile, metrics, logs, physiqueRecords, isAuthenticated, currentMemberId, isAdmin]);
+
+  const handleClaimReward = () => {
+    if (!pendingReward) return;
+    const today = new Date().toLocaleDateString('en-CA');
+    const newCollected = [...(profile.collectedRewardIds || []), pendingReward.id];
+    
+    setProfile(prev => ({
+      ...prev,
+      collectedRewardIds: Array.from(new Set(newCollected)),
+      lastRewardClaimDate: today
+    }));
+    
+    setShowRewardModal(false);
+    setPendingReward(null);
+  };
 
   const handleLogin = async (id: string, pass: string) => {
     const mid = id.trim().toLowerCase();
@@ -166,16 +224,26 @@ const App: React.FC = () => {
     return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} loginError={loginError} />;
   }
 
+  // 判斷今日是否已領取
+  const todayDate = new Date().toLocaleDateString('en-CA');
+  const rewardPending = profile.lastRewardClaimDate !== todayDate;
+
   return (
     <div className="flex min-h-screen bg-white">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        memberId={currentMemberId || ''} 
+        isAdmin={isAdmin} 
+        onLogout={handleLogout}
+        hasPendingReward={rewardPending} // 將待領取狀態傳給側邊欄
+      />
       <main className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 overflow-x-hidden relative">
         <div className="animate-in fade-in duration-500">
           {activeTab === 'dashboard' && (
             <DataEngine 
               profile={profile} 
               metrics={metrics} 
-              logs={logs} 
               onAddMetric={(m) => setMetrics([...metrics, m])} 
               onUpdateMetrics={setMetrics}
               onUpdateProfile={setProfile} 
@@ -189,7 +257,22 @@ const App: React.FC = () => {
           {activeTab === 'admin' && <AdminPanel />}
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} />}
         </div>
-        {isSyncing && <div className="fixed top-8 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
+        
+        {/* 同步提示 */}
+        {isSyncing && (
+          <div className="fixed top-8 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20">
+            <Loader2 size={12} className="animate-spin" /> SYNCING
+          </div>
+        )}
+
+        {/* 每日領取獎勵彈窗 */}
+        {showRewardModal && pendingReward && (
+          <DailyRewardModal 
+            reward={pendingReward} 
+            streak={profile.loginStreak || 1} 
+            onClaim={handleClaimReward} 
+          />
+        )}
       </main>
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} isAdmin={isAdmin} />
     </div>

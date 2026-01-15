@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, ShieldCheck, LogOut, Package } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, ShieldCheck, LogOut, Package, Star } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -8,15 +8,16 @@ interface SidebarProps {
   memberId: string;
   isAdmin: boolean;
   onLogout: () => void;
+  hasPendingReward?: boolean; // 新增：是否有待領取獎勵
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, isAdmin, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, isAdmin, onLogout, hasPendingReward = false }) => {
   const navItems = [
     { id: 'dashboard', label: '健身數據', icon: <LayoutDashboard size={18} /> },
     { id: 'journal', label: '訓練日誌', icon: <Dumbbell size={18} /> },
     { id: 'scan', label: '體態診斷', icon: <Camera size={18} /> },
     { id: 'report', label: '健身週報', icon: <ScrollText size={18} /> },
-    { id: 'vault', label: '收藏金庫', icon: <Package size={18} /> }, // 新增
+    { id: 'vault', label: '收藏金庫', icon: <Package size={18} />, badge: hasPendingReward }, 
     { id: 'settings', label: '系統設定', icon: <SettingsIcon size={18} /> },
     ...(isAdmin ? [{ id: 'admin', label: '管理面板', icon: <ShieldCheck size={18} /> }] : []),
   ];
@@ -36,14 +37,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, is
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}
-            className={`w-full flex items-center gap-4 px-8 py-4 transition-all ${
+            className={`w-full flex items-center gap-4 px-8 py-4 transition-all relative ${
               activeTab === item.id 
                 ? 'sidebar-active font-black' 
                 : 'text-gray-400 hover:text-black hover:bg-gray-50'
             }`}
           >
-            <span className={activeTab === item.id ? 'text-black' : 'text-gray-300'}>{item.icon}</span>
-            <span className="text-[11px] uppercase tracking-wider">{item.label}</span>
+            <span className={`relative ${activeTab === item.id ? 'text-black' : 'text-gray-300'}`}>
+              {item.icon}
+              {item.badge && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#bef264] border-2 border-black rounded-full animate-ping"></span>
+              )}
+            </span>
+            <span className="text-[11px] uppercase tracking-wider flex items-center gap-2">
+              {item.label}
+              {item.badge && <span className="text-[8px] font-black text-black bg-[#bef264] px-1 rounded-sm animate-pulse">REWARD</span>}
+            </span>
           </button>
         ))}
       </nav>

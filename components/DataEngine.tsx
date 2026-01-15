@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { UserMetrics, UserProfile } from '../types';
 import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus, getLocalTimestamp } from '../utils/calculations';
-import { Zap, Activity, Shield, Award, TrendingUp, History, Trash2, ChevronDown, Terminal } from 'lucide-react';
+import { Zap, Activity, Shield, Award, TrendingUp, History, Trash2, ChevronDown, Terminal, Wifi, Cloud } from 'lucide-react';
 
 interface DataEngineProps {
   profile: UserProfile;
@@ -33,6 +33,20 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
   const [isSyncing, setIsSyncing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
+  // David 教練的動態鼓勵語
+  const coachMessage = useMemo(() => {
+    const hour = new Date().getHours();
+    const streak = profile.loginStreak || 1;
+    
+    let greeting = "";
+    if (hour >= 5 && hour < 12) greeting = "早安，執行者。晨間生理矩陣已就緒。今天的你，準備好超越昨日的極限了嗎？";
+    else if (hour >= 12 && hour < 18) greeting = "午安。戰略引擎正處於巔峰狀態。數據顯示這是你突破肌肉壓力的最佳時機。";
+    else greeting = "晚安。訓練後修復鏈路啟動中。封存今日的汗水，那是你進化的代價。";
+
+    if (streak > 3) greeting += ` (偵測到連續 ${streak} 天同步，意志力水平：極高)`;
+    return greeting;
+  }, [profile.loginStreak]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isSyncing) return;
@@ -40,7 +54,6 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
     
     const weightVal = Number(input.weight) || 0;
     const bodyFatVal = Number(input.bodyFat) || 0;
-    // 自動推算肌肉量
     const mMass = input.muscleMass === '' 
       ? Number((weightVal * (1 - bodyFatVal / 100) * 0.8).toFixed(1))
       : Number(input.muscleMass);
@@ -71,11 +84,26 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
 
   return (
     <div className="animate-in fade-in duration-700 space-y-8 pb-32">
-      <div className="bg-black text-[#bef264] px-6 py-3 flex items-center gap-3 border-b border-[#bef264]/20">
-        <Terminal size={14} />
-        <p className="text-[10px] font-black tracking-widest uppercase">
-          David教練: 生理數據鏈路同步中。狀態：{isDbConnected ? 'CONNECTED' : 'LOCAL_ONLY'}
-        </p>
+      {/* 升級後的 David 教練動態標頭 */}
+      <div className="bg-black text-[#bef264] px-8 py-5 flex flex-col md:flex-row items-center justify-between gap-4 border-b-2 border-[#bef264] shadow-[0_4px_20px_rgba(190,242,100,0.1)] relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-[#bef264] animate-pulse"></div>
+        <div className="flex items-start gap-4 flex-1">
+          <Terminal size={18} className="mt-1 shrink-0" />
+          <div className="space-y-1">
+            <p className="text-[9px] font-black uppercase tracking-[0.3em] opacity-60">David Coach Strategic Uplink</p>
+            <p className="text-sm md:text-base font-bold italic leading-relaxed text-white">
+              「{coachMessage}」
+            </p>
+          </div>
+        </div>
+        
+        {/* 獨立出的狀態膠囊 */}
+        <div className="flex items-center gap-3 bg-[#bef264]/10 border border-[#bef264]/30 px-4 py-2 rounded-full shrink-0">
+          <div className={`w-2 h-2 rounded-full ${isDbConnected ? 'bg-[#bef264] animate-pulse shadow-[0_0_8px_#bef264]' : 'bg-red-500'}`}></div>
+          <p className="text-[10px] font-black tracking-widest uppercase">
+            STATUS: <span className={isDbConnected ? 'text-[#bef264]' : 'text-red-500'}>{isDbConnected ? 'CONNECTED' : 'LOCAL_ONLY'}</span>
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col xl:flex-row gap-8">
