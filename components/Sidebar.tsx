@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, ShieldCheck, LogOut } from 'lucide-react';
+import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, ShieldCheck, LogOut, Package } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -16,6 +16,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, is
     { id: 'journal', label: '訓練日誌', icon: <Dumbbell size={18} /> },
     { id: 'scan', label: '體態診斷', icon: <Camera size={18} /> },
     { id: 'report', label: '健身週報', icon: <ScrollText size={18} /> },
+    { id: 'vault', label: '收藏金庫', icon: <Package size={18} /> }, // 新增
     { id: 'settings', label: '系統設定', icon: <SettingsIcon size={18} /> },
     ...(isAdmin ? [{ id: 'admin', label: '管理面板', icon: <ShieldCheck size={18} /> }] : []),
   ];

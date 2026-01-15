@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { UserProfile, FitnessGoal, GoalMetadata } from '../types';
 import { Save, Plus, CheckCircle, Sliders, Target, User as UserIcon } from 'lucide-react';
 
@@ -17,6 +17,12 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
     '臥推凳', '腿推機', '單槓', '壺鈴', '划船機', '跑步機'
   ];
 
+  // 合併基礎器材與用戶自訂器材
+  const allAvailableEquipment = useMemo(() => {
+    const custom = profile.customEquipmentPool || [];
+    return [...new Set([...baseEquipment, ...custom])];
+  }, [profile.customEquipmentPool]);
+
   const handleChange = (field: keyof UserProfile, value: any) => {
     setProfile({ ...profile, [field]: value });
   };
@@ -33,16 +39,20 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
   const addCustomEquipment = () => {
     const trimmed = newEqInput.trim();
     if (!trimmed) return;
+    
     const pool = profile.customEquipmentPool || [];
     if (pool.includes(trimmed)) {
       setNewEqInput('');
       return;
     }
+    
     const newPool = [...pool, trimmed];
+    const newSelected = [...(profile.equipment || []), trimmed];
+    
     setProfile({
       ...profile,
       customEquipmentPool: newPool,
-      equipment: [...(profile.equipment || []), trimmed]
+      equipment: newSelected
     });
     setNewEqInput('');
   };
@@ -134,7 +144,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
           
           <div className="space-y-10">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {baseEquipment.map(item => (
+              {allAvailableEquipment.map(item => (
                 <button
                   key={item}
                   onClick={() => toggleEquipment(item)}
@@ -156,7 +166,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
                   type="text"
                   value={newEqInput}
                   onChange={e => setNewEqInput(e.target.value)}
-                  placeholder="新增..."
+                  placeholder="輸入器械名稱..."
                   className="flex-1 bg-white border border-gray-200 px-4 h-12 text-sm font-bold outline-none focus:border-black"
                 />
                 <button 

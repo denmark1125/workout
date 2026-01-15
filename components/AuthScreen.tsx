@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Lock, User as UserIcon, Mail, ArrowRight, ArrowLeft, CheckCircle, ShieldAlert, Target } from 'lucide-react';
+import { Lock, User as UserIcon, Mail, ArrowRight, ArrowLeft, CheckCircle, ShieldAlert, Target, Zap, Activity, Heart } from 'lucide-react';
 import { UserProfile, FitnessGoal, GoalMetadata } from '../types';
 
 interface AuthScreenProps {
@@ -20,7 +20,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
   // Register States
   const [regData, setRegData] = useState<Partial<UserProfile>>({
     goal: FitnessGoal.HYPERTROPHY,
-    age: 25, height: 175, gender: 'M'
+    age: 25, height: 175, gender: 'M',
+    trainingPreference: 'BALANCED'
   });
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [weight, setWeight] = useState(70);
@@ -33,7 +34,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
     const finalProfile: UserProfile = {
       ...regData,
       memberId: memberId,
-      name: regData.name || memberId, // Default to memberId if name is blank
+      name: regData.name || memberId,
       password: regData.password || '0000',
       gender: regData.gender || 'M',
       height: regData.height || 175,
@@ -41,7 +42,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
       goal: regData.goal || FitnessGoal.HYPERTROPHY,
       equipment: [],
       customEquipmentPool: [],
-      loginStreak: 1
+      loginStreak: 1,
+      collectedRewardIds: []
     } as UserProfile;
     
     onRegister(finalProfile, weight);
@@ -79,7 +81,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
         ) : (
           <div className="animate-in fade-in slide-in-from-right-4 duration-500 bg-white border border-gray-100 p-8 shadow-2xl min-h-[520px] flex flex-col">
             
-            {/* Step 1: Privacy Policy */}
             {step === 1 && (
               <div className="space-y-6 flex-1 flex flex-col animate-in fade-in">
                 <div className="space-y-2">
@@ -93,11 +94,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
                   </section>
                   <section>
                     <p className="font-black text-black mb-1 underline">二、數據收集與隱私</p>
-                    <p>我們會收集您的生理指標（體重、體脂、身高）與上傳的視覺診斷照片。照片將進行隱私模糊處理後存儲於加密伺服器，僅供 AI 分析與您個人回顧使用。我們承諾不會在未經許可的情況下向第三方出售個人識別資訊。</p>
-                  </section>
-                  <section>
-                    <p className="font-black text-black mb-1 underline">三、服務使用限制</p>
-                    <p>本系統僅作為輔助工具，分析結果（包含 AI 視覺診斷）乃基於演算法推估，可能存在誤差。不得將系統數據作為醫療診斷書或保險理賠依據。</p>
+                    <p>我們會收集您的生理指標與上傳的視覺診斷照片。照片將進行隱私模糊處理後存儲，僅供 AI 分析與個人回顧使用。</p>
                   </section>
                 </div>
                 <label className="flex items-center gap-3 cursor-pointer group p-2 bg-gray-50 border border-transparent hover:border-black transition-all">
@@ -108,7 +105,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
               </div>
             )}
 
-            {/* Step 2: Biological Matrix */}
             {step === 2 && (
               <div className="space-y-8 animate-in fade-in">
                 <div className="space-y-1">
@@ -145,7 +141,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
               </div>
             )}
 
-            {/* Step 3: Account Credentials */}
             {step === 3 && (
               <div className="space-y-6 animate-in fade-in">
                 <div className="space-y-1">
@@ -153,10 +148,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Step 03 / Credentials</p>
                 </div>
                 <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">用戶暱稱 (可不填)</label>
-                    <input type="text" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} className="w-full bg-gray-50 border-b px-4 py-4 text-sm font-bold outline-none" placeholder="你的名字" />
-                  </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">帳號 ID (登入用)</label>
                     <input type="text" value={regData.memberId || ''} onChange={e => setRegData({...regData, memberId: e.target.value.toLowerCase()})} className="w-full bg-gray-50 border-b px-4 py-4 text-sm font-bold outline-none" placeholder="member_id" />
@@ -166,37 +157,67 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
                     <input type="password" value={regData.password || ''} onChange={e => setRegData({...regData, password: e.target.value})} className="w-full bg-gray-50 border-b px-4 py-4 text-sm font-bold outline-none tracking-[0.4em]" placeholder="****" />
                   </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 mt-4">
                   <button onClick={prevStep} className="flex-1 py-4 text-[10px] font-black uppercase text-gray-400">返回</button>
                   <button onClick={nextStep} className="flex-[2] bg-black text-white py-4 font-black text-[10px] tracking-widest uppercase">下一步 NEXT</button>
                 </div>
               </div>
             )}
 
-            {/* Step 4: Fitness Goals */}
             {step === 4 && (
-              <div className="space-y-8 animate-in fade-in">
+              <div className="space-y-6 animate-in fade-in">
                 <div className="space-y-1">
-                  <h2 className="text-xl font-black tracking-tight">核心健身目標</h2>
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Step 04 / Fitness Target</p>
+                  <h2 className="text-xl font-black tracking-tight">戰略目標與風格</h2>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Step 04 / Strategy</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(FitnessGoal).map(([key, value]) => (
-                    <button
-                      key={value}
-                      onClick={() => setRegData({...regData, goal: value as FitnessGoal})}
-                      className={`p-4 border text-left transition-all ${
-                        regData.goal === value 
-                          ? 'bg-black text-[#bef264] border-black scale-105 z-10' 
-                          : 'bg-white border-gray-100 text-gray-400'
-                      }`}
-                    >
-                      <p className="font-black text-[10px] uppercase tracking-tighter leading-none">{GoalMetadata[value as FitnessGoal].label}</p>
-                      <p className="text-[7px] mt-1 opacity-60">{GoalMetadata[value as FitnessGoal].focus}</p>
-                    </button>
-                  ))}
+                
+                <div className="space-y-6">
+                  <section>
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-3">核心目標 Core Goal</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(FitnessGoal).map(([key, value]) => (
+                        <button
+                          key={value}
+                          onClick={() => setRegData({...regData, goal: value as FitnessGoal})}
+                          className={`p-3 border text-left transition-all ${
+                            regData.goal === value 
+                              ? 'bg-black text-[#bef264] border-black' 
+                              : 'bg-white border-gray-100 text-gray-400'
+                          }`}
+                        >
+                          <p className="font-black text-[9px] uppercase tracking-tighter leading-none">{GoalMetadata[value as FitnessGoal].label}</p>
+                          <p className="text-[6px] mt-1 opacity-60 leading-tight">{GoalMetadata[value as FitnessGoal].focus}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section>
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-3">訓練偏好 Style Preference</p>
+                    <div className="flex gap-2">
+                      {[
+                        { id: 'WEIGHTS', label: '阻力重訓', icon: <Zap size={10}/> },
+                        { id: 'CARDIO', label: '有氧代謝', icon: <Heart size={10}/> },
+                        { id: 'BALANCED', label: '均衡並重', icon: <Activity size={10}/> }
+                      ].map(style => (
+                        <button
+                          key={style.id}
+                          onClick={() => setRegData({...regData, trainingPreference: style.id as any})}
+                          className={`flex-1 flex flex-col items-center gap-1 py-3 border transition-all ${
+                            regData.trainingPreference === style.id 
+                              ? 'bg-black text-[#bef264] border-black' 
+                              : 'bg-gray-50 text-gray-400'
+                          }`}
+                        >
+                          {style.icon}
+                          <span className="text-[8px] font-black uppercase">{style.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 </div>
-                <div className="flex gap-3">
+
+                <div className="flex gap-3 pt-4">
                   <button onClick={prevStep} className="flex-1 py-4 text-[10px] font-black uppercase text-gray-400">返回</button>
                   <button onClick={handleRegisterFinal} className="flex-[2] bg-black text-white py-4 font-black text-[10px] tracking-widest">啟動系統 INITIALIZE</button>
                 </div>
