@@ -17,15 +17,15 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
 
   const handleGenerate = async () => {
     if (metrics.length === 0 && logs.length === 0) {
-      alert("數據不足。");
+      alert("數據不足，請先輸入健身數據或訓練日誌。");
       return;
     }
     setLoading(true);
     try {
       const result = await generateWeeklyReport(profile, metrics, logs, physiqueRecords);
-      setReport(result || "生成失敗。");
+      setReport(result || "生成失敗，系統無效回饋。");
     } catch (err) {
-      setReport("與核心引擎連線異常。");
+      setReport("與核心引擎連線異常，請檢查網路狀態。");
     } finally {
       setLoading(false);
     }
@@ -33,17 +33,17 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
 
   return (
     <div className="max-w-6xl mx-auto space-y-12 md:space-y-20 pb-40">
-      <header className="flex flex-col md:flex-row items-end justify-between border-b-4 border-white/10 pb-10 gap-6 px-2">
+      <header className="flex flex-col md:flex-row items-end justify-between border-b-4 border-black/5 pb-10 gap-6 px-2">
         <div>
-          <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Tactical Command Engine</p>
-          <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase leading-none">Strategic Report</h2>
+          <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Fitness Command Hub</p>
+          <h2 className="text-4xl md:text-6xl font-black text-black tracking-tighter uppercase leading-none">健身戰略週報</h2>
         </div>
         <button
           onClick={handleGenerate}
           disabled={loading}
-          className="bg-[#bef264] text-black px-10 py-5 font-black uppercase tracking-[0.4em] text-xs hover:bg-black hover:text-[#bef264] transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1 animate-glow"
+          className="bg-[#bef264] text-black px-10 py-5 font-black uppercase tracking-[0.4em] text-xs hover:bg-black hover:text-[#bef264] transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1 animate-glow rounded-sm"
         >
-          {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> ANALYZING...</> : <><Zap className="w-5 h-5 fill-current" /> 生成戰略週報</>}
+          {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> ANALYZING...</> : <><Zap className="w-5 h-5 fill-current" /> 生成 AI 週報</>}
         </button>
       </header>
 
@@ -56,14 +56,14 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
           <div className="max-w-3xl relative z-10 space-y-16">
             <div className="flex items-center gap-4">
                <div className="w-20 h-1 bg-[#bef264]"></div>
-               <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.4em]">Official Intelligence Output</h3>
+               <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.4em]">Official Fitness Intelligence Output</h3>
             </div>
 
-            <div className="report-typography prose prose-invert max-w-none text-gray-700">
+            <div className="report-typography prose max-w-none text-gray-700">
               <div className="whitespace-pre-wrap font-sans">
                 {report.split('\n').map((line, i) => {
                   if (line.startsWith('###')) {
-                    return <h3 key={i} className="tracking-tighter !font-black !text-3xl !text-gray-900 border-none pl-0 !mb-8">{line.replace('###', '').trim()}</h3>;
+                    return <h3 key={i} className="tracking-tighter !font-black !text-3xl !text-gray-900 border-none pl-0 !mb-8 !mt-12 first:mt-0">{line.replace('###', '').trim()}</h3>;
                   }
                   if (line.startsWith('-')) {
                     return (
@@ -81,17 +81,17 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-12 bg-gray-200 gap-px p-px shadow-xl rounded-sm overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-12 bg-gray-100 gap-px p-px shadow-xl rounded-sm overflow-hidden border border-gray-100">
            <div className="md:col-span-4 bg-[#fcfcfc] p-16 flex flex-col items-center justify-center text-center space-y-6">
               <FileText className="w-12 h-12 text-gray-200" />
               <div>
-                <p className="text-2xl font-black text-gray-900 tracking-tighter uppercase mb-2">矩陣待命</p>
+                <p className="text-2xl font-black text-gray-900 tracking-tighter uppercase mb-2">數據待命中</p>
                 <p className="text-[10px] text-gray-400 font-mono font-black uppercase tracking-[0.5em]">SYSTEM STANDBY</p>
               </div>
            </div>
            <div className="md:col-span-8 bg-[#fcfcfc] p-12 md:p-20 flex flex-col justify-center space-y-10 border-l border-gray-100">
              <p className="text-2xl md:text-3xl font-medium text-gray-400 tracking-tight leading-relaxed">
-               <span className="text-gray-900 font-black">AI Command Hub</span> 正在監聽生理矩陣。啟動戰略生成，整合您的訓練日誌、體標變化與視覺分析報告。
+               <span className="text-gray-900 font-black">AI Fitness Hub</span> 正在監測生理矩陣。啟動健身週報生成，我們將整合您的訓練日誌、體標變化與視覺分析報告，提供下週戰術建議。
              </p>
            </div>
         </div>

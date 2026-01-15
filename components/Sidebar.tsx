@@ -12,10 +12,10 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, isAdmin, onLogout }) => {
   const navItems = [
-    { id: 'dashboard', label: '數據中心', icon: <LayoutDashboard size={18} /> },
+    { id: 'dashboard', label: '健身數據', icon: <LayoutDashboard size={18} /> },
     { id: 'journal', label: '訓練日誌', icon: <Dumbbell size={18} /> },
-    { id: 'scan', label: '視覺診斷', icon: <Camera size={18} /> },
-    { id: 'report', label: '戰略週報', icon: <ScrollText size={18} /> },
+    { id: 'scan', label: '體態診斷', icon: <Camera size={18} /> },
+    { id: 'report', label: '健身週報', icon: <ScrollText size={18} /> },
     { id: 'settings', label: '系統設定', icon: <SettingsIcon size={18} /> },
     ...(isAdmin ? [{ id: 'admin', label: '管理面板', icon: <ShieldCheck size={18} /> }] : []),
   ];
@@ -27,7 +27,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, is
           <div className="w-8 h-8 bg-black text-[#bef264] flex items-center justify-center font-black text-sm italic">M</div>
           <h1 className="text-xl font-black tracking-tighter">MATRIX</h1>
         </div>
-        <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest pl-11">Tactical Analysis</p>
+        <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest pl-11">Fitness Analysis</p>
       </div>
 
       <nav className="flex-1 mt-4">

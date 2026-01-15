@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { UserProfile, FitnessGoal, GoalMetadata } from '../types';
-import { Save, Plus, CheckCircle, Sliders, Target, Lock, User as UserIcon } from 'lucide-react';
+import { Save, Plus, CheckCircle, Sliders, Target, User as UserIcon } from 'lucide-react';
 
 interface SettingsProps {
   profile: UserProfile;
@@ -11,8 +11,6 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
   const [showSaved, setShowSaved] = useState(false);
   const [newEqInput, setNewEqInput] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newMemberId, setNewMemberId] = useState('');
 
   const baseEquipment = [
     '啞鈴', '槓鈴', '纜繩機', '深蹲架', '史密斯機', 
@@ -49,14 +47,6 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
     setNewEqInput('');
   };
 
-  const handleUpdateAccount = () => {
-    if (newMemberId.trim()) handleChange('memberId', newMemberId.trim().toLowerCase());
-    if (newPassword.trim()) handleChange('password', newPassword.trim());
-    setNewMemberId('');
-    setNewPassword('');
-    handleSave();
-  };
-
   const handleSave = () => {
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
@@ -80,44 +70,6 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 bg-white border border-gray-100 rounded-sm overflow-hidden shadow-2xl">
         <div className="lg:col-span-5 p-8 md:p-10 space-y-10 border-b lg:border-b-0 lg:border-r border-gray-100">
           
-          {/* 帳號與安全 (New Section) */}
-          <section className="space-y-8 bg-gray-50/50 p-6 border border-gray-100">
-            <h3 className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-widest flex items-center gap-3">
-              <Lock size={12} /> 帳號安全與權限 (Security)
-            </h3>
-            <div className="space-y-6">
-              <div>
-                <label className="block text-[8px] font-black uppercase tracking-widest mb-2 text-gray-400">變更帳號 ID</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="New ID..."
-                    value={newMemberId}
-                    onChange={e => setNewMemberId(e.target.value)}
-                    className="flex-1 bg-white border border-gray-200 px-4 py-3 text-sm font-bold outline-none focus:border-black"
-                  />
-                  <div className="bg-black text-[#bef264] px-4 py-3 text-[8px] font-black flex items-center uppercase">Auth</div>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[8px] font-black uppercase tracking-widest mb-2 text-gray-400">變更密碼 Password</label>
-                <input
-                  type="password"
-                  placeholder="New Password..."
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  className="w-full bg-white border border-gray-200 px-4 py-3 text-sm font-bold outline-none focus:border-black tracking-[0.4em]"
-                />
-              </div>
-              <button 
-                onClick={handleUpdateAccount}
-                className="w-full bg-black text-white py-3 text-[9px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
-              >
-                更新存取憑證 UPDATE_CREDENTIALS
-              </button>
-            </div>
-          </section>
-
           <section className="space-y-8">
             <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4 flex items-center gap-3">
               <UserIcon size={12} className="text-black" /> 執行者身分 (Identity)
