@@ -1,0 +1,7 @@
+{
+  "name": "The Matrix - AI Physique Strategist",
+  "description": "A high-end, professional AI-powered fitness strategist featuring physiological data matrices, radar charts, and Gemini-driven physique scanning and weekly tactical reports.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
