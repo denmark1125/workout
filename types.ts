@@ -58,7 +58,7 @@ export interface UserProfile {
   goal: FitnessGoal;
   customGoalText?: string;
   equipment?: string[];
-  customEquipmentPool?: string[]; // New: user-added equipment options
+  customEquipmentPool?: string[];
 }
 
 export interface CalculatedData {
@@ -66,4 +66,17 @@ export interface CalculatedData {
   bmr: number;
   ffmi: number;
   score: number;
+}
+
+// --- 管理員系統新增 ---
+export interface LoginLog {
+  memberId: string;
+  timestamp: string;
+  userAgent: string;
+}
+
+export interface UserRegistryEntry {
+  memberId: string;
+  lastActive: string;
+  status: 'ACTIVE' | 'BANNED';
 }
