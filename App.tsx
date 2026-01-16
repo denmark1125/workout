@@ -14,9 +14,10 @@ import DailyRewardModal from './components/DailyRewardModal';
 import Onboarding from './components/Onboarding'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
+import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; // Import new function
 import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
 import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
-import { Loader2, AlertTriangle, LogOut } from 'lucide-react';
+import { Loader2, AlertTriangle, LogOut, Terminal } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -28,6 +29,13 @@ const App: React.FC = () => {
   const [pendingReward, setPendingReward] = useState<any>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTimeoutWarning, setShowTimeoutWarning] = useState<string | null>(null);
+
+  const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
+  const [isBriefingLoading, setIsBriefingLoading] = useState(false);
+  
+  // David Coach Greeting State
+  const [davidGreeting, setDavidGreeting] = useState<string>("");
+  const [isGreetingLoading, setIsGreetingLoading] = useState(false);
 
   const timeoutRef = useRef<any>(null);
 
@@ -93,6 +101,23 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentMemberId]);
 
+  // Load Greeting when profile loads
+  // 優化：只要已登入，就嘗試獲取問候。如果 profile.name 還是 'User'，服務層會處理為 '執行者'
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (!davidGreeting) setIsGreetingLoading(true);
+      
+      // 延遲一點點確保 profile 稍微同步，或者直接獲取
+      getDavidGreeting(profile)
+        .then(msg => setDavidGreeting(msg))
+        .catch(() => {
+           // 這裡的 catch 通常不會觸發，因為 service 內部有 fallback，但以防萬一
+           setDavidGreeting(`David 教練：${profile.name}，系統已就緒。隨時準備開始訓練。`);
+        })
+        .finally(() => setIsGreetingLoading(false));
+    }
+  }, [isAuthenticated, profile.name]); // profile.name 變更時會重新觸發，確保名稱更新後問候語也更新
+
   useEffect(() => {
     const initializeCloudData = async () => {
       if (!db || !isAuthenticated || !currentMemberId) return;
@@ -128,6 +153,15 @@ const App: React.FC = () => {
              const rewardIndex = (updatedProfile.collectedRewardIds?.length || 0) % REWARDS_DATABASE.length;
              setPendingReward(REWARDS_DATABASE[rewardIndex]);
              setShowRewardModal(true);
+
+             setIsBriefingLoading(true);
+             getDailyBriefing(updatedProfile, updatedProfile.loginStreak || 1)
+               .then(briefing => {
+                 setDailyBriefing(briefing);
+               })
+               .finally(() => {
+                 setIsBriefingLoading(false);
+               });
           }
 
           if (updatedProfile.lastLoginDate !== todayStr) {
@@ -263,8 +297,28 @@ const App: React.FC = () => {
         hasPendingReward={rewardPending}
         profile={profile}
       />
-      <main className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 overflow-x-hidden relative">
-        <div className="animate-in fade-in duration-500">
+      <main className="flex-1 overflow-x-hidden relative flex flex-col">
+        
+        {/* David Coach Permanent Header Banner */}
+        <div className="bg-black text-[#bef264] px-4 md:px-8 py-3 flex items-start gap-4 shadow-md z-20 sticky top-0 shrink-0">
+           <div className="mt-0.5 animate-pulse">
+              <Terminal size={16} className="fill-current" />
+           </div>
+           <div className="flex-1">
+             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-0.5">David Coach Uplink</p>
+             <p className="text-sm font-bold font-mono leading-tight">
+                {isGreetingLoading && !davidGreeting ? (
+                  <span className="animate-pulse">Analyzing Season & Biometrics...</span>
+                ) : (
+                  <span className="animate-in fade-in duration-700">
+                    {davidGreeting || "系統連線中..."}
+                  </span>
+                )}
+             </p>
+           </div>
+        </div>
+
+        <div className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 animate-in fade-in duration-500">
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} />}
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} />}
@@ -275,13 +329,19 @@ const App: React.FC = () => {
         </div>
         
         {isSyncing && (
-          <div className="fixed top-8 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20">
+          <div className="fixed top-20 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20">
             <Loader2 size={12} className="animate-spin" /> SYNCING
           </div>
         )}
 
         {showRewardModal && pendingReward && !showOnboarding && (
-          <DailyRewardModal reward={pendingReward} streak={profile.loginStreak || 1} onClaim={handleClaimReward} />
+          <DailyRewardModal 
+            reward={pendingReward} 
+            streak={profile.loginStreak || 1} 
+            onClaim={handleClaimReward}
+            briefing={dailyBriefing}
+            isLoadingBriefing={isBriefingLoading}
+          />
         )}
 
         {showOnboarding && <Onboarding userName={profile.name} onComplete={handleOnboardingComplete} onStepChange={setActiveTab} />}
