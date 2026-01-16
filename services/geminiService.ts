@@ -1,15 +1,42 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
 
-// 輔助函數：安全獲取 AI 實例
+// 輔助函數：安全獲取 AI 實例 (Vite/Env 兼容版)
 const getAIInstance = () => {
-  // 修正：同時支援標準名稱 API_KEY 與用戶截圖中的自訂名稱 workout_gemini_API
-  const apiKey = process.env.workout_gemini_API || process.env.API_KEY;
-  
+  let apiKey = '';
+
+  // 1. 優先嘗試從 Vite 標準環境變數獲取 (import.meta.env)
+  // 這是解決 "API Key Missing" 的關鍵，因為前端瀏覽器環境主要支援此方式
+  try {
+    // 使用 any 轉型避開 TypeScript 對 import.meta 的檢查 (因為可能缺少 vite-env.d.ts)
+    const meta = import.meta as any;
+    if (typeof meta !== 'undefined' && meta.env) {
+      apiKey = meta.env.VITE_WORKOUT_GEMINI_API || 
+               meta.env.VITE_API_KEY || 
+               meta.env.workout_gemini_API || 
+               '';
+    }
+  } catch (e) {
+    console.warn("Vite environment check failed, falling back...");
+  }
+
+  // 2. 備用嘗試從 Node.js 環境變數獲取 (process.env)
+  // 用於兼容部分舊建置工具或測試環境
   if (!apiKey) {
-    console.error("API Key Missing: Checked 'workout_gemini_API' and 'API_KEY'");
-    throw new Error("API Key not found. Please set 'workout_gemini_API' in Vercel Environment Variables.");
+    try {
+      // @ts-ignore
+      if (typeof process !== 'undefined' && process.env) {
+        // @ts-ignore
+        apiKey = process.env.VITE_WORKOUT_GEMINI_API || process.env.workout_gemini_API || process.env.API_KEY || '';
+      }
+    } catch (e) {
+      // 忽略 process 未定義的錯誤，避免在瀏覽器中報錯
+    }
+  }
+
+  if (!apiKey) {
+    console.error("Critical Error: AI API Key not found. Checked VITE_WORKOUT_GEMINI_API, workout_gemini_API, API_KEY.");
+    throw new Error("API Key Missing. Please set 'VITE_WORKOUT_GEMINI_API' in your environment variables.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -154,7 +181,8 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     });
     return response.text;
   } catch (error) {
-    return `### ⚠️ 系統連線異常\n\nDavid 教練：${profile.name}，目前無法連接至視覺核心。請檢查環境變數 workout_gemini_API 是否設定正確。`;
+    console.error("Physique Analysis Error:", error);
+    return `### ⚠️ 系統連線異常\n\nDavid 教練：${profile.name}，目前無法連接至視覺核心。請檢查瀏覽器控制台日誌以獲取更多資訊，或確認 VITE_WORKOUT_GEMINI_API 設定。`;
   }
 };
 
@@ -209,7 +237,8 @@ export const generateWeeklyReport = async (
     }
     return outputText;
   } catch (error) {
-    return `### ⚠️ 週報生成失敗\n\nDavid 教練：系統離線。請檢查環境變數 workout_gemini_API 設定。`;
+    console.error("Weekly Report Generation Error:", error);
+    return `### ⚠️ 週報生成失敗\n\nDavid 教練：系統離線。請檢查環境變數 VITE_WORKOUT_GEMINI_API 設定。`;
   }
 };
 
