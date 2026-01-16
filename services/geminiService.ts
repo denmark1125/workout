@@ -1,28 +1,16 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
 
-// 輔助函數：安全獲取 AI 實例 (Simplified Vite Version)
+// 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  // 使用 any 轉型避開 TypeScript 對 import.meta 的檢查 (因為可能缺少 vite-env.d.ts)
-  const meta = import.meta as any;
+  // Vite 標準寫法：直接讀取 VITE_ 開頭的變數
+  const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;
   
-  // Vite 在打包時會自動將 import.meta.env.VITE_XXX 替換為實際數值
-  // 這是最直接針對 Vite/Vercel 的讀取方式
-  const apiKey = meta.env?.VITE_WORKOUT_GEMINI_API;
-
   if (!apiKey) {
-    // 增加一個明確的錯誤訊息，方便在控制台除錯
-    const errorMsg = "API Key 缺失：請確認 Vercel 後台已設定 'VITE_WORKOUT_GEMINI_API' 並重新部署。";
-    console.error(errorMsg);
-    
-    // 除錯輔助：印出目前能讀取到的環境變數物件 (不含值，確認 key 是否存在)
-    if (meta.env) {
-      console.warn("Available Env Keys:", Object.keys(meta.env));
-    }
-    
-    throw new Error(errorMsg);
+    console.error("API Key Missing: 找不到 VITE_WORKOUT_GEMINI_API");
+    throw new Error("請確認 Vercel 後台環境變數名稱是否為 VITE_WORKOUT_GEMINI_API 並重新部署。");
   }
-
   return new GoogleGenAI({ apiKey });
 };
 
@@ -30,11 +18,6 @@ const getAIInstance = () => {
  * 測試 AI 連線狀態
  */
 export const testConnection = async (): Promise<boolean> => {
-  // DEBUG: Vercel Environment Variable Diagnostics
-  const meta = import.meta as any;
-  const key = meta.env?.VITE_WORKOUT_GEMINI_API;
-  console.log("[System Diagnostic] Environment Variable Check:", key ? `Active (Length: ${key.length})` : "CRITICAL_FAILURE: Variable Not Found");
-
   try {
     const ai = getAIInstance();
     await ai.models.generateContent({
@@ -56,10 +39,10 @@ export const getDavidGreeting = async (profile: UserProfile): Promise<string> =>
   const hour = new Date().getHours();
   const month = new Date().getMonth() + 1; // 1-12
   
-  // 優先使用 Member ID (執行者代號)，除非用戶有設定非預設的暱稱
+  // 優先使用 Member ID (巨巨代號)，除非用戶有設定非預設的暱稱
   const nameToUse = (profile.name && profile.name !== 'User') 
     ? profile.name 
-    : (profile.memberId || '執行者');
+    : (profile.memberId || '巨巨');
 
   let quotes: string[] = [];
 
@@ -124,7 +107,7 @@ export const getDavidGreeting = async (profile: UserProfile): Promise<string> =>
 };
 
 /**
- * 視覺診斷 (仍維持 AI 功能)
+ * 視覺診斷 (使用 AI)
  */
 export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
   const meta = GoalMetadata[profile.goal];
@@ -171,13 +154,12 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     });
     return response.text;
   } catch (error) {
-    console.error("Physique Analysis Error:", error);
-    return `### ⚠️ 系統連線異常\n\nDavid 教練：${profile.name}，目前無法連接至視覺核心。請檢查瀏覽器控制台日誌以獲取更多資訊，或確認 VITE_WORKOUT_GEMINI_API 設定。`;
+    return `### ⚠️ 系統連線異常\n\nDavid 教練：無法連接至視覺核心。請檢查 VITE_WORKOUT_GEMINI_API 設定。`;
   }
 };
 
 /**
- * 戰略週報 (仍維持 AI 功能)
+ * 戰略週報 (使用 AI)
  */
 export const generateWeeklyReport = async (
   profile: UserProfile, 
@@ -227,8 +209,7 @@ export const generateWeeklyReport = async (
     }
     return outputText;
   } catch (error) {
-    console.error("Weekly Report Generation Error:", error);
-    return `### ⚠️ 週報生成失敗\n\nDavid 教練：系統離線。請檢查環境變數 VITE_WORKOUT_GEMINI_API 設定。`;
+    return `### ⚠️ 週報生成失敗\n\nDavid 教練：系統離線。請檢查 VITE_WORKOUT_GEMINI_API 設定。`;
   }
 };
 

@@ -102,7 +102,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
           
           <section className="space-y-8">
             <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4 flex items-center gap-3">
-              <UserIcon size={12} className="text-black" /> 執行者身分 (Identity)
+              <UserIcon size={12} className="text-black" /> 巨巨身分 (Identity)
             </h3>
             <div className="space-y-6">
               <div>

@@ -2,19 +2,25 @@
 import React, { useState, useRef } from 'react';
 import { UserProfile, PhysiqueRecord } from '../types';
 import { getPhysiqueAnalysis } from '../services/geminiService';
-import { Camera, FileText, ChevronRight, X, User, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Camera, FileText, ChevronRight, X, User, Loader2, Eye, EyeOff, Trash2, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PhysiqueScannerProps {
   profile: UserProfile;
   records: PhysiqueRecord[];
   onAddRecord: (record: PhysiqueRecord) => void;
+  onDeleteRecord?: (id: string) => void;
 }
 
-const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onAddRecord }) => {
+const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onAddRecord, onDeleteRecord }) => {
   const [image, setImage] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [revealedRecords, setRevealedRecords] = useState<Set<string>>(new Set());
+  
+  // 記錄展開狀態 (ID)
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+  // 記錄解鎖模糊狀態 (ID Set) - 即使展開也預設模糊，需二次點擊解鎖
+  const [unlockedImages, setUnlockedImages] = useState<Set<string>>(new Set());
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const compressImage = (base64Str: string): Promise<string> => {
@@ -72,11 +78,25 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
     }
   };
 
-  const toggleReveal = (id: string) => {
-    const newSet = new Set(revealedRecords);
+  const toggleExpand = (id: string) => {
+    if (expandedRecordId === id) {
+      setExpandedRecordId(null);
+    } else {
+      setExpandedRecordId(id);
+    }
+  };
+
+  const toggleImageLock = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const newSet = new Set(unlockedImages);
     if (newSet.has(id)) newSet.delete(id);
     else newSet.add(id);
-    setRevealedRecords(newSet);
+    setUnlockedImages(newSet);
+  };
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (onDeleteRecord) onDeleteRecord(id);
   };
 
   return (
@@ -145,42 +165,100 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         </div>
       </div>
 
-      {/* 歷史存檔 - 隱私優化 */}
+      {/* 歷史存檔 - 加密日誌列表樣式 (隱私優化版) */}
       <div className="space-y-8">
-        <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-6">
-          視覺診斷存檔 <div className="h-1 bg-gray-100 flex-1"></div>
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {records.map(record => (
-            <div key={record.id} className="bg-white border border-gray-100 p-8 shadow-xl space-y-6">
-              <div className="flex justify-between items-center mb-2">
-                <p className="text-[10px] font-mono font-black text-gray-400">{record.date}</p>
-                <button 
-                  onClick={() => toggleReveal(record.id)}
-                  className="text-gray-400 hover:text-black transition-colors"
-                >
-                  {revealedRecords.has(record.id) ? <EyeOff size={18}/> : <Eye size={18}/>}
-                </button>
-              </div>
-              
-              <div className="aspect-square bg-gray-50 border border-gray-100 overflow-hidden relative">
-                 <img 
-                    src={record.image} 
-                    className={`w-full h-full object-cover ${revealedRecords.has(record.id) ? '' : 'blur-privacy'}`} 
-                    alt="History"
-                 />
-                 {!revealedRecords.has(record.id) && (
-                   <div className="absolute inset-0 flex items-center justify-center bg-black/5">
-                      <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest bg-white/80 px-3 py-1">隱私保護中</p>
-                   </div>
-                 )}
-              </div>
+        <div className="flex items-end justify-between border-b border-gray-100 pb-4">
+           <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-4">
+             <Lock size={20} className="text-black" />
+             加密診斷存檔 
+             <span className="text-[10px] text-gray-400 font-mono tracking-widest translate-y-1">SECURE_LOGS</span>
+           </h3>
+           <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">TOTAL_RECORDS: {records.length}</p>
+        </div>
 
-              <div className="max-h-32 overflow-y-auto text-[11px] text-gray-500 font-medium leading-relaxed custom-scrollbar border-t border-gray-50 pt-4">
-                 {record.analysis.substring(0, 150)}...
-              </div>
+        <div className="space-y-2">
+          {records.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 border border-gray-100 border-dashed">
+              <p className="text-gray-400 font-black text-xs uppercase tracking-widest">暫無存檔紀錄</p>
             </div>
-          ))}
+          ) : (
+            records.map(record => {
+              const isExpanded = expandedRecordId === record.id;
+              const isUnlocked = unlockedImages.has(record.id);
+
+              return (
+                <div key={record.id} className="bg-white border border-gray-100 transition-all hover:border-gray-300">
+                  {/* Log Header (Compact Row) */}
+                  <div 
+                    onClick={() => toggleExpand(record.id)}
+                    className={`flex items-center justify-between p-5 cursor-pointer select-none ${isExpanded ? 'bg-black text-white' : 'hover:bg-gray-50'}`}
+                  >
+                    <div className="flex items-center gap-6 overflow-hidden">
+                       <div className={`p-2 rounded-sm ${isExpanded ? 'bg-[#bef264] text-black' : 'bg-gray-100 text-gray-400'}`}>
+                         {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                       </div>
+                       <div className="font-mono text-xs font-bold tracking-widest truncate">
+                         <span className={isExpanded ? 'text-gray-400' : 'text-gray-900'}>{record.date}</span>
+                         <span className="mx-3 opacity-30">|</span>
+                         <span className={isExpanded ? 'text-[#bef264]' : 'text-gray-500'}>LOG_ID_{record.id.slice(-6).toUpperCase()}</span>
+                       </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 pl-4 shrink-0">
+                       <div className={`text-[9px] font-black uppercase tracking-widest border px-2 py-1 ${isExpanded ? 'border-gray-700 text-gray-400' : 'border-gray-200 text-gray-300'}`}>
+                          {isExpanded ? 'ACCESSING...' : 'ENCRYPTED'}
+                       </div>
+                       <button 
+                         onClick={(e) => handleDelete(e, record.id)}
+                         className={`p-2 transition-colors ${isExpanded ? 'text-gray-600 hover:text-red-500' : 'text-gray-200 hover:text-red-500'}`}
+                         title="銷毀紀錄"
+                       >
+                         <Trash2 size={16} />
+                       </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded Content (Hidden by default for privacy) */}
+                  {isExpanded && (
+                    <div className="p-8 border-t border-gray-100 bg-[#fcfcfc] animate-in slide-in-from-top-2 duration-300">
+                      <div className="flex flex-col md:flex-row gap-8">
+                        {/* Image Section - Blurred by default */}
+                        <div className="w-full md:w-64 shrink-0 space-y-3">
+                           <div className="aspect-[3/4] bg-black relative overflow-hidden group shadow-inner border border-gray-200">
+                              <img 
+                                src={record.image} 
+                                className={`w-full h-full object-cover transition-all duration-700 ${isUnlocked ? 'blur-0 opacity-100' : 'blur-xl opacity-50'}`} 
+                                alt="Secure Content"
+                              />
+                              
+                              <button 
+                                onClick={(e) => toggleImageLock(e, record.id)}
+                                className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/10 hover:bg-black/20 transition-all z-10 w-full"
+                              >
+                                 <div className={`p-4 rounded-full backdrop-blur-md border ${isUnlocked ? 'bg-white/10 border-white/20' : 'bg-black/50 border-white/10'}`}>
+                                   {isUnlocked ? <Unlock size={24} className="text-white" /> : <Lock size={24} className="text-white" />}
+                                 </div>
+                                 <p className="text-[9px] font-black text-white uppercase tracking-widest shadow-black drop-shadow-md">
+                                   {isUnlocked ? 'TAP TO LOCK' : 'TAP TO DECRYPT'}
+                                 </p>
+                              </button>
+                           </div>
+                        </div>
+
+                        {/* Text Analysis */}
+                        <div className="flex-1 space-y-4">
+                           <h4 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-200 pb-2">Analysis Data</h4>
+                           <div className="text-xs font-medium text-gray-600 leading-loose whitespace-pre-wrap font-sans h-64 overflow-y-auto custom-scrollbar pr-2">
+                             {record.analysis}
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

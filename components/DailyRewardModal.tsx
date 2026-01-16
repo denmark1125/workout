@@ -50,14 +50,14 @@ const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onC
            </div>
            
            {isLoadingBriefing ? (
-             <div className="flex items-center gap-2 text-gray-500">
-               <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
-               <p className="text-sm font-bold italic text-gray-400">正在接收戰略指令...</p>
+             <div className="flex items-center gap-2 text-white/50 text-xs py-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="font-mono">Downloading Tactical Briefing...</span>
              </div>
            ) : (
-             <p className="text-white text-sm font-bold italic leading-relaxed">
+             <p className="text-white text-sm font-bold italic leading-relaxed animate-in fade-in">
                {briefing ? (
-                 (briefing.startsWith('「') || briefing.startsWith('"')) ? briefing : `「${briefing}」`
+                 briefing.startsWith('「') ? briefing : `「${briefing}」`
                ) : (
                  `「偵測到你已連續 ${streak} 天維持訓練紀律。這不只是數據的紀錄，更是你意志力的具現化。這是你應得的戰利品，封存它，讓它成為你訓練矩陣的基石。現在，準備開練。」`
                )}

@@ -14,10 +14,10 @@ import DailyRewardModal from './components/DailyRewardModal';
 import Onboarding from './components/Onboarding'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
-import { getDailyBriefing, getDavidGreeting } from './services/geminiService';
-import { getLocalTimestamp } from './utils/calculations';
-import { REWARDS_DATABASE } from './utils/rewardAssets';
-import { Loader2, AlertTriangle, Terminal, Clock, ShieldAlert } from 'lucide-react';
+import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; // Import new function
+import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
+import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
+import { Loader2, AlertTriangle, LogOut, Terminal } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -28,9 +28,7 @@ const App: React.FC = () => {
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [pendingReward, setPendingReward] = useState<any>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  
-  // 修改：閒置提醒狀態，支援不同階段的訊息
-  const [idleWarningType, setIdleWarningType] = useState<'1H' | '2H' | null>(null);
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState<string | null>(null);
 
   const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
@@ -39,8 +37,7 @@ const App: React.FC = () => {
   const [davidGreeting, setDavidGreeting] = useState<string>("");
   const [isGreetingLoading, setIsGreetingLoading] = useState(false);
 
-  // 使用 Ref 來記錄最後活動時間，避免頻繁渲染
-  const lastActivityRef = useRef<number>(Date.now());
+  const timeoutRef = useRef<any>(null);
 
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
     return localStorage.getItem('matrix_active_user');
@@ -67,49 +64,32 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [physiqueRecords, setPhysiqueRecords] = useState<PhysiqueRecord[]>([]);
 
-  // --- 分級閒置監測系統 (1小時 -> 2小時 -> 2.5小時) ---
+  // 智慧工作階段管理 (閒置登出)
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // 1. 定義時間常數 (毫秒)
-    const ONE_HOUR = 60 * 60 * 1000;
-    const TWO_HOURS = 2 * 60 * 60 * 1000;
-    const TWO_POINT_FIVE_HOURS = 2.5 * 60 * 60 * 1000;
+    const resetTimer = () => {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => handleLogout(true), 3 * 60 * 60 * 1000); // 3 小時自動登出
+      
+      const warning1 = setTimeout(() => setShowTimeoutWarning("1.5小時"), 1.5 * 60 * 60 * 1000);
+      const warning2 = setTimeout(() => setShowTimeoutWarning("2小時"), 2 * 60 * 60 * 1000);
 
-    // 2. 更新最後活動時間的函式
-    const updateActivity = () => {
-      lastActivityRef.current = Date.now();
-      // 如果使用者有動作，且目前有警告視窗，則關閉警告
-      setIdleWarningType((prev) => prev ? null : prev);
+      const events = ['mousemove', 'keydown', 'touchstart'];
+      const eventHandler = () => {
+        clearTimeout(warning1);
+        clearTimeout(warning2);
+        resetTimer();
+        events.forEach(event => window.removeEventListener(event, eventHandler));
+      };
+      
+      events.forEach(event => window.addEventListener(event, eventHandler, { once: true }));
     };
 
-    // 3. 綁定監聽器
-    const events = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll', 'mousedown'];
-    events.forEach(event => window.addEventListener(event, updateActivity));
-
-    // 4. 啟動定時檢查器 (每 10 秒檢查一次)
-    const checkInterval = setInterval(() => {
-      const now = Date.now();
-      const idleTime = now - lastActivityRef.current;
-
-      if (idleTime > TWO_POINT_FIVE_HOURS) {
-        // 超過 2.5 小時 -> 強制登出
-        handleLogout(true); 
-      } else if (idleTime > TWO_HOURS) {
-        // 超過 2 小時 -> 設定 2H 警告
-        setIdleWarningType(prev => prev !== '2H' ? '2H' : prev);
-      } else if (idleTime > ONE_HOUR) {
-        // 超過 1 小時 -> 設定 1H 警告 (如果還沒變成 2H)
-        setIdleWarningType(prev => (prev !== '1H' && prev !== '2H') ? '1H' : prev);
-      }
-    }, 10000); // 10秒檢查頻率
-
-    // 初始化
-    updateActivity();
+    resetTimer();
 
     return () => {
-      clearInterval(checkInterval);
-      events.forEach(event => window.removeEventListener(event, updateActivity));
+      clearTimeout(timeoutRef.current);
     };
   }, [isAuthenticated]);
 
@@ -121,6 +101,7 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentMemberId]);
 
+  // Load Greeting when profile loads
   useEffect(() => {
     if (isAuthenticated) {
       if (!davidGreeting) setIsGreetingLoading(true);
@@ -292,8 +273,13 @@ const App: React.FC = () => {
     setCurrentMemberId(null);
     setIsAuthenticated(false);
     setActiveTab('dashboard');
-    setIdleWarningType(null);
-    if (isAuto) alert("David 教練：偵測到系統閒置超過 2.5 小時，為了數據安全，已執行強制登出程序。");
+    if (isAuto) alert("系統偵測到您已閒置超過3小時，為安全起見已自動登出。");
+  };
+
+  const handleDeletePhysiqueRecord = (id: string) => {
+    if (confirm("David 教練：確定要銷毀這份視覺診斷紀錄嗎？此操作無法復原。")) {
+      setPhysiqueRecords(prev => prev.filter(r => r.id !== id));
+    }
   };
 
   if (!isAuthenticated) {
@@ -338,7 +324,14 @@ const App: React.FC = () => {
         <div className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 animate-in fade-in duration-500">
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} />}
-          {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} />}
+          {activeTab === 'scan' && (
+            <PhysiqueScanner 
+              profile={profile} 
+              records={physiqueRecords} 
+              onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])}
+              onDeleteRecord={handleDeletePhysiqueRecord}
+            />
+          )}
           {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
@@ -363,44 +356,17 @@ const App: React.FC = () => {
 
         {showOnboarding && <Onboarding userName={profile.name} onComplete={handleOnboardingComplete} onStepChange={setActiveTab} />}
         
-        {/* 閒置提醒 Modal (1小時 / 2小時) */}
-        {idleWarningType && (
+        {showTimeoutWarning && (
           <div className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
-            <div className={`bg-white p-10 max-w-md w-full border-4 shadow-2xl text-center space-y-8 animate-in zoom-in duration-300 ${idleWarningType === '2H' ? 'border-red-500' : 'border-yellow-400'}`}>
-              {idleWarningType === '2H' ? (
-                 <ShieldAlert size={48} className="mx-auto text-red-500 animate-pulse" />
-              ) : (
-                 <Clock size={48} className="mx-auto text-yellow-500" />
-              )}
-              
-              <div className="space-y-4">
-                <h3 className="text-2xl font-black uppercase tracking-tighter">
-                  {idleWarningType === '2H' ? '長時間閒置警告' : '閒置提醒'}
-                </h3>
-                <p className="text-gray-600 font-bold leading-relaxed">
-                  {idleWarningType === '2H' 
-                    ? `David 教練：警告。系統已閒置超過 2 小時。再過 30 分鐘將執行強制登出程序。請立即執行任意操作以維持連線。`
-                    : `David 教練：偵測到系統已閒置超過 1 小時。您的訓練結束了嗎？若要繼續使用，請移動滑鼠或點擊畫面。`
-                  }
-                </p>
+            <div className="bg-white p-10 max-w-md w-full border-4 border-yellow-400 shadow-2xl text-center space-y-8 animate-in zoom-in duration-300">
+              <AlertTriangle size={48} className="mx-auto text-yellow-500" />
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black uppercase tracking-tighter">閒置提醒</h3>
+                <p className="text-gray-600 font-bold">David 教練：偵測到您已閒置超過 {showTimeoutWarning}，請問還在訓練嗎？</p>
               </div>
-              
               <div className="flex gap-4">
-                <button 
-                  onClick={() => handleLogout()} 
-                  className="flex-1 py-4 bg-gray-100 text-gray-500 font-black uppercase text-xs tracking-widest hover:bg-red-500 hover:text-white transition-all"
-                >
-                  立即登出
-                </button>
-                <button 
-                  onClick={() => {
-                    lastActivityRef.current = Date.now();
-                    setIdleWarningType(null);
-                  }} 
-                  className={`flex-1 py-4 font-black uppercase text-xs tracking-widest transition-all text-white ${idleWarningType === '2H' ? 'bg-red-600 hover:bg-red-700' : 'bg-black hover:bg-[#bef264] hover:text-black'}`}
-                >
-                  繼續保持連線
-                </button>
+                <button onClick={() => handleLogout()} className="flex-1 py-4 bg-gray-100 text-gray-500 font-black uppercase text-xs tracking-widest hover:bg-red-500 hover:text-white transition-all">登出</button>
+                <button onClick={() => setShowTimeoutWarning(null)} className="flex-1 py-4 bg-black text-white font-black uppercase text-xs tracking-widest hover:bg-[#bef264] hover:text-black transition-all">繼續訓練</button>
               </div>
             </div>
           </div>
