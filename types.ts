@@ -67,8 +67,9 @@ export interface UserProfile {
   password?: string;
   lastRewardClaimDate?: string;
   collectedRewardIds?: number[];
-  unlockedAchievementIds?: string[]; // 新增：隱藏成就解鎖 ID
+  unlockedAchievementIds?: string[];
   trainingPreference?: 'WEIGHTS' | 'CARDIO' | 'BALANCED';
+  hasCompletedOnboarding?: boolean; // 新增：是否完成新手教學
 }
 
 export interface CalculatedData {

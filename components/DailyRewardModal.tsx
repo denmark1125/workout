@@ -24,11 +24,11 @@ const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onC
       <div className="w-full max-w-md bg-white border-t-8 border-black p-6 md:p-10 my-auto space-y-6 md:space-y-8 relative shadow-[0_0_100px_rgba(190,242,100,0.2)] animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto custom-scrollbar">
         <div className="flex justify-between items-start">
           <div className="space-y-1">
-            <p className="text-[11px] font-black text-lime-600 uppercase tracking-[0.4em]">Uplink Sync Successful</p>
-            <h2 className="text-2xl md:text-3xl font-black tracking-tighter uppercase">每日資產補給</h2>
+            <p className="text-[11px] font-black text-lime-600 uppercase tracking-[0.4em]">Consistency Reward Unlocked</p>
+            <h2 className="text-2xl md:text-3xl font-black tracking-tighter uppercase">每日紀律戰利品</h2>
           </div>
           <div className="bg-black text-[#bef264] px-3 py-1 text-[10px] font-black">
-            STREAK: {streak}D
+            連續進步: {streak}D
           </div>
         </div>
 
@@ -37,7 +37,7 @@ const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onC
             <RewardIcon reward={reward} size={revealed ? 100 : 60} />
           </div>
           <div className="text-center space-y-2 mt-4">
-            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">解鎖模組編號</p>
+            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">獲得模組編號</p>
             <h3 className="text-xl md:text-2xl font-black tracking-widest text-black uppercase">{reward.name}</h3>
           </div>
         </div>
@@ -45,10 +45,10 @@ const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onC
         <div className="bg-black p-5 md:p-6 space-y-4">
            <div className="flex items-center gap-3 text-[#bef264]">
               <Terminal size={14} />
-              <p className="text-[11px] font-black uppercase tracking-widest">David 教練戰略指令:</p>
+              <p className="text-[11px] font-black uppercase tracking-widest">David 教練指令:</p>
            </div>
            <p className="text-white text-sm font-bold italic leading-relaxed">
-             「偵測到生物信號連續第 {streak} 天同步。你的意志力正在重塑這份數據。這是你今日的進化補給，封存它，讓它成為你訓練矩陣的基石。現在，準備啟動。」
+             「偵測到你已連續 {streak} 天維持訓練紀律。這不只是數據的紀錄，更是你意志力的具現化。這是你應得的戰利品，封存它，讓它成為你訓練矩陣的基石。現在，準備開練。」
            </p>
         </div>
 
@@ -56,7 +56,7 @@ const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onC
           onClick={onClaim}
           className="w-full bg-[#bef264] text-black py-4 md:py-5 font-black text-xs tracking-[0.5em] uppercase hover:bg-black hover:text-white transition-all shadow-xl flex items-center justify-center gap-4 sticky bottom-0"
         >
-          封存此資產並啟動系統 <ArrowRight size={16} />
+          封存戰利品並啟動系統 <ArrowRight size={16} />
         </button>
       </div>
     </div>

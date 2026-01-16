@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { UserMetrics, UserProfile } from '../types';
 import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus, getLocalTimestamp } from '../utils/calculations';
-import { Zap, Activity, Shield, Award, TrendingUp, History, Trash2, ChevronDown, Terminal, Wifi, Cloud } from 'lucide-react';
+import { Zap, Activity, Shield, Award, TrendingUp, History, Trash2, ChevronDown, Terminal, AlertTriangle } from 'lucide-react';
 
 interface DataEngineProps {
   profile: UserProfile;
@@ -33,19 +33,37 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
   const [isSyncing, setIsSyncing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  // David 教練的動態鼓勵語
   const coachMessage = useMemo(() => {
     const hour = new Date().getHours();
     const streak = profile.loginStreak || 1;
+    const userName = profile.name || '執行者';
+    
+    // 惰性偵測：計算天數差
+    const lastLogin = profile.lastLoginDate ? new Date(profile.lastLoginDate) : new Date();
+    const today = new Date();
+    const diffTime = Math.abs(today.getTime() - lastLogin.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= 2) {
+      const parts = ['胸背重量', '腿部專項', '肩膀與核心', '高強度間歇'];
+      const recommended = parts[Math.floor(Math.random() * parts.length)];
+      return `[警告] ${userName}，偵測到你已中斷連線 ${diffDays} 天。肌肉正在萎縮，意志正在動搖。David 教練建議今日強制執行「${recommended}訓練菜單」，立刻啟動，別讓昨天的努力付諸流水。`;
+    }
     
     let greeting = "";
-    if (hour >= 5 && hour < 12) greeting = "早安，執行者。晨間生理鏈路已完全同步。今天的你，準備好超越昨日的極限了嗎？";
-    else if (hour >= 12 && hour < 18) greeting = "午安。戰略引擎正處於巔峰狀態。這是你突破肌肉壓力的最佳時機，別浪費這股能量。";
-    else greeting = "晚安。訓練後修復鏈路啟動中。封存今日的汗水，那是你進化的必要代價。";
+    if (hour >= 5 && hour < 12) {
+      greeting = `早安 ${userName}。晨間體徵已同步。昨天的努力正在轉化成肌肉，今天打算在哪個動作上突破極限？`;
+    } else if (hour >= 12 && hour < 18) {
+      greeting = `午安 ${userName}。系統偵測到你正處於能量高峰。這是把重訓架練爆的最佳時機，別讓藉口阻礙你的進化。`;
+    } else {
+      greeting = `晚安 ${userName}。今日的訓練數據已全數封存。肌肉正在修復與重組，好好休息，明天我們繼續變強。`;
+    }
 
-    if (streak > 3) greeting += ` (系統偵測到你已連續 ${streak} 天超越自我，這份紀律令人畏懼)`;
+    if (streak > 3) {
+      greeting += ` (偵測到你已連續 ${streak} 天維持紀律，這份鋼鐵意志才是你最強大的裝備。)`;
+    }
     return greeting;
-  }, [profile.loginStreak]);
+  }, [profile.loginStreak, profile.name, profile.lastLoginDate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +90,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
   };
 
   const handleDeleteMetric = (id: string) => {
-    if (confirm('David教練: 確定要抹除這筆生理節點嗎？這將影響長期趨勢分析。')) {
+    if (confirm(`David教練: ${profile.name}，確定要抹除這筆生理紀錄嗎？這將導致進化趨勢出現斷層。`)) {
       if (onUpdateMetrics) onUpdateMetrics(metrics.filter(m => m.id !== id));
     }
   };
@@ -84,20 +102,18 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
 
   return (
     <div className="animate-in fade-in duration-700 space-y-8 pb-32">
-      {/* 升級後的 David 教練動態標頭 */}
       <div className="bg-black text-[#bef264] px-6 md:px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-6 border-b-2 border-[#bef264] shadow-[0_4px_20px_rgba(190,242,100,0.1)] relative overflow-hidden">
         <div className="absolute top-0 left-0 w-1 h-full bg-[#bef264] animate-pulse"></div>
         <div className="flex items-start gap-4 flex-1">
           <Terminal size={20} className="mt-1 shrink-0 text-[#bef264]" />
           <div className="space-y-1">
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-60">David Coach Strategic Command</p>
-            <p className="text-base md:text-lg font-bold italic leading-relaxed text-white">
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-60">David Coach Command Hub</p>
+            <p className={`text-base md:text-lg font-bold italic leading-relaxed ${coachMessage.includes('[警告]') ? 'text-red-400' : 'text-white'}`}>
               「{coachMessage}」
             </p>
           </div>
         </div>
         
-        {/* 獨立出的狀態膠囊 */}
         <div className="flex items-center gap-3 bg-[#bef264]/10 border border-[#bef264]/30 px-5 py-2.5 rounded-full shrink-0">
           <div className={`w-2.5 h-2.5 rounded-full ${isDbConnected ? 'bg-[#bef264] animate-pulse shadow-[0_0_10px_#bef264]' : 'bg-red-500'}`}></div>
           <p className="text-[11px] font-black tracking-[0.2em] uppercase">
@@ -108,7 +124,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
 
       <div className="flex flex-col xl:flex-row gap-8">
         <div className="flex-1 space-y-8">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="metric-cards">
             {[
               { label: 'BMI 指數', value: calculated.bmi.toFixed(1), icon: <Activity size={18} />, status: getBMIStatus(calculated.bmi) },
               { label: 'BMR 代謝', value: Math.round(calculated.bmr), icon: <Zap size={18} /> },
@@ -129,7 +145,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-[#fcfcfc] border border-gray-100 p-6 h-[350px]">
+            <div className="bg-[#fcfcfc] border border-gray-100 p-6 h-[350px]" id="radar-chart">
                <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-4">RADAR_ANALYSIS</div>
                <ResponsiveContainer width="100%" height="100%">
                  <RadarChart data={radarData}>
@@ -161,7 +177,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
              <button onClick={() => setShowHistory(!showHistory)} className="w-full flex items-center justify-between px-8 py-6 hover:bg-gray-50 transition-all border-b border-gray-50">
                 <div className="flex items-center gap-3">
                    <History size={18} className="text-gray-400" />
-                   <span className="text-[11px] font-black uppercase tracking-widest text-black">歷史數據節點清單 ({metrics.length})</span>
+                   <span className="text-[11px] font-black uppercase tracking-widest text-black">歷史紀錄清單 ({metrics.length})</span>
                 </div>
                 <ChevronDown size={18} className={`transition-transform ${showHistory ? 'rotate-180' : ''}`} />
              </button>
@@ -185,9 +201,9 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
           </div>
         </div>
 
-        <div className="w-full xl:w-80">
+        <div className="w-full xl:w-80" id="data-input">
           <form onSubmit={handleSubmit} className="bg-white border-2 border-black p-8 space-y-8 shadow-xl">
-            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4">生理數據輸入 (INPUT_NODE)</p>
+            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4">健身紀錄輸入 (INPUT_NODE)</p>
             <div className="space-y-6">
               <div>
                 <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 block">體重 Weight (kg)</label>
@@ -223,7 +239,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
                 disabled={isSyncing}
                 className="w-full bg-black text-white py-5 font-black text-[11px] tracking-[0.4em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-md"
               >
-                {isSyncing ? 'SYNCING...' : '更新體徵數據 COMMIT'}
+                {isSyncing ? 'SYNCING...' : '更新健身數據 COMMIT'}
               </button>
             </div>
           </form>

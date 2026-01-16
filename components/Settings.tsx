@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { UserProfile, FitnessGoal, GoalMetadata } from '../types';
-import { Save, Plus, CheckCircle, Sliders, Target, User as UserIcon } from 'lucide-react';
+import { Save, Plus, CheckCircle, Sliders, Target, User as UserIcon, X } from 'lucide-react';
 
 interface SettingsProps {
   profile: UserProfile;
@@ -17,7 +17,6 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
     '臥推凳', '腿推機', '單槓', '壺鈴', '划船機', '跑步機'
   ];
 
-  // 合併基礎器材與用戶自訂器材
   const allAvailableEquipment = useMemo(() => {
     const custom = profile.customEquipmentPool || [];
     return [...new Set([...baseEquipment, ...custom])];
@@ -55,6 +54,17 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
       equipment: newSelected
     });
     setNewEqInput('');
+  };
+
+  const removeCustomEquipment = (item: string) => {
+    if (baseEquipment.includes(item)) return;
+    const pool = (profile.customEquipmentPool || []).filter(i => i !== item);
+    const selected = (profile.equipment || []).filter(i => i !== item);
+    setProfile({
+      ...profile,
+      customEquipmentPool: pool,
+      equipment: selected
+    });
   };
 
   const handleSave = () => {
@@ -123,17 +133,29 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
             </h3>
             <div className="grid grid-cols-1 gap-2">
               {Object.entries(FitnessGoal).map(([key, value]) => (
-                <button
-                  key={value}
-                  onClick={() => handleChange('goal', value)}
-                  className={`p-4 border text-left transition-all ${
-                    profile.goal === value 
-                      ? 'bg-black text-[#bef264] border-black' 
-                      : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
-                  }`}
-                >
-                  <p className="font-black text-[11px] uppercase tracking-tighter">{GoalMetadata[value as FitnessGoal].label}</p>
-                </button>
+                <div key={value} className="space-y-2">
+                  <button
+                    onClick={() => handleChange('goal', value)}
+                    className={`w-full p-4 border text-left transition-all ${
+                      profile.goal === value 
+                        ? 'bg-black text-[#bef264] border-black' 
+                        : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
+                    }`}
+                  >
+                    <p className="font-black text-[11px] uppercase tracking-tighter">{GoalMetadata[value as FitnessGoal].label}</p>
+                  </button>
+                  {value === FitnessGoal.CUSTOM && profile.goal === FitnessGoal.CUSTOM && (
+                    <div className="animate-in slide-in-from-top-2">
+                       <label className="text-[8px] font-black text-gray-400 uppercase mb-1 block">請輸入您的自訂健身願景：</label>
+                       <textarea 
+                         value={profile.customGoalText || ''}
+                         onChange={e => handleChange('customGoalText', e.target.value)}
+                         placeholder="例如：在三個月內完成首次半馬，且體重不掉..."
+                         className="w-full bg-gray-50 border border-gray-100 p-3 text-xs font-bold outline-none focus:border-black resize-none h-20"
+                       />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </section>
@@ -144,19 +166,31 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
           
           <div className="space-y-10">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {allAvailableEquipment.map(item => (
-                <button
-                  key={item}
-                  onClick={() => toggleEquipment(item)}
-                  className={`px-3 py-4 text-left text-[10px] font-black uppercase tracking-tight border transition-all ${
-                    (profile.equipment || []).includes(item)
-                      ? 'bg-[#bef264] border-[#bef264] text-black shadow-sm'
-                      : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
+              {allAvailableEquipment.map(item => {
+                const isCustom = (profile.customEquipmentPool || []).includes(item);
+                return (
+                  <div key={item} className="relative group">
+                    <button
+                      onClick={() => toggleEquipment(item)}
+                      className={`w-full px-3 py-4 text-left text-[10px] font-black uppercase tracking-tight border transition-all ${
+                        (profile.equipment || []).includes(item)
+                          ? 'bg-[#bef264] border-[#bef264] text-black shadow-sm'
+                          : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
+                      }`}
+                    >
+                      {item}
+                    </button>
+                    {isCustom && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); removeCustomEquipment(item); }}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="pt-10 border-t border-gray-100">

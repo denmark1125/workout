@@ -11,6 +11,7 @@ import TrainingJournal from './components/TrainingJournal';
 import AdminPanel from './components/AdminPanel';
 import RewardVault from './components/RewardVault'; 
 import DailyRewardModal from './components/DailyRewardModal';
+import Onboarding from './components/Onboarding'; // 新增
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
 import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
@@ -23,9 +24,9 @@ const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
   
-  // 獎勵領取狀態
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [pendingReward, setPendingReward] = useState<any>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false); // 新增
 
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
     return localStorage.getItem('matrix_active_user');
@@ -44,7 +45,8 @@ const App: React.FC = () => {
     loginStreak: 1, lastLoginDate: '',
     memberId: '', password: '',
     collectedRewardIds: [],
-    unlockedAchievementIds: []
+    unlockedAchievementIds: [],
+    hasCompletedOnboarding: true
   });
 
   const [metrics, setMetrics] = useState<UserMetrics[]>([]);
@@ -59,7 +61,6 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentMemberId]);
 
-  // 初始化雲端數據與檢查每日領取
   useEffect(() => {
     const initializeCloudData = async () => {
       if (!db || !isAuthenticated || !currentMemberId) return;
@@ -76,7 +77,11 @@ const App: React.FC = () => {
           const today = new Date().toLocaleDateString('en-CA');
           let updatedProfile = { ...p };
           
-          // --- 強化：每日獎勵領取攔截器 ---
+          // 教學檢測
+          if (updatedProfile.hasCompletedOnboarding === false) {
+            setShowOnboarding(true);
+          }
+
           const hasClaimedToday = updatedProfile.lastRewardClaimDate === today;
           if (!hasClaimedToday) {
              const rewardIndex = (updatedProfile.collectedRewardIds?.length || 0) % REWARDS_DATABASE.length;
@@ -110,7 +115,6 @@ const App: React.FC = () => {
     initializeCloudData();
   }, [isAuthenticated, currentMemberId]);
 
-  // 監測成就解鎖邏輯
   useEffect(() => {
     if (!isAuthenticated || !currentMemberId || metrics.length === 0) return;
     
@@ -119,7 +123,6 @@ const App: React.FC = () => {
     const updatedCollected = [...(profile.collectedRewardIds || [])];
     let changed = false;
 
-    // 成就 1: 健身評分突破 80
     if (calculated.score >= 80 && !updatedCollected.includes(ACHIEVEMENT_REWARDS['high_score'].id)) {
       updatedCollected.push(ACHIEVEMENT_REWARDS['high_score'].id);
       changed = true;
@@ -136,7 +139,6 @@ const App: React.FC = () => {
     }
   }, [metrics, logs, isAuthenticated]);
 
-  // 自動同步回雲端
   useEffect(() => {
     if (!isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
     const timer = setTimeout(() => {
@@ -163,6 +165,11 @@ const App: React.FC = () => {
     setPendingReward(null);
   };
 
+  const handleOnboardingComplete = () => {
+    setProfile(prev => ({ ...prev, hasCompletedOnboarding: true }));
+    setShowOnboarding(false);
+  };
+
   const handleLogin = async (id: string, pass: string) => {
     const mid = id.trim().toLowerCase();
     const remoteProfile = await fetchFromCloud('profiles', mid);
@@ -182,6 +189,8 @@ const App: React.FC = () => {
   const handleRegister = async (newProfile: UserProfile, initialWeight: number) => {
     setIsSyncing(true);
     try {
+      // 新註冊帳號開啟新手教學
+      const profileToSave = { ...newProfile, hasCompletedOnboarding: false };
       const initialMetric: UserMetrics = {
         id: Date.now().toString(),
         date: getLocalTimestamp(),
@@ -190,10 +199,10 @@ const App: React.FC = () => {
         muscleMass: 0 
       };
       await Promise.all([
-        syncToCloud('profiles', newProfile, newProfile.memberId),
+        syncToCloud('profiles', profileToSave, newProfile.memberId),
         syncToCloud('metrics', [initialMetric], newProfile.memberId)
       ]);
-      setProfile(newProfile);
+      setProfile(profileToSave);
       setMetrics([initialMetric]);
       executeAuth(newProfile.memberId);
     } catch (e) {
@@ -224,7 +233,6 @@ const App: React.FC = () => {
     return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} loginError={loginError} />;
   }
 
-  // 判斷今日是否已領取
   const todayDate = new Date().toLocaleDateString('en-CA');
   const rewardPending = profile.lastRewardClaimDate !== todayDate;
 
@@ -236,7 +244,7 @@ const App: React.FC = () => {
         memberId={currentMemberId || ''} 
         isAdmin={isAdmin} 
         onLogout={handleLogout}
-        hasPendingReward={rewardPending} // 將待領取狀態傳給側邊欄
+        hasPendingReward={rewardPending}
       />
       <main className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 overflow-x-hidden relative">
         <div className="animate-in fade-in duration-500">
@@ -258,19 +266,24 @@ const App: React.FC = () => {
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} />}
         </div>
         
-        {/* 同步提示 */}
         {isSyncing && (
           <div className="fixed top-8 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20">
             <Loader2 size={12} className="animate-spin" /> SYNCING
           </div>
         )}
 
-        {/* 每日領取獎勵彈窗 */}
         {showRewardModal && pendingReward && (
           <DailyRewardModal 
             reward={pendingReward} 
             streak={profile.loginStreak || 1} 
             onClaim={handleClaimReward} 
+          />
+        )}
+
+        {showOnboarding && (
+          <Onboarding 
+            userName={profile.name} 
+            onComplete={handleOnboardingComplete} 
           />
         )}
       </main>

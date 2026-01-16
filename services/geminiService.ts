@@ -2,35 +2,50 @@
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
 
+// 初始化 AI 引擎
+const getAIInstance = () => {
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
+
+/**
+ * 視覺診斷：由 David 教練進行體態影像分析
+ */
 export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAIInstance();
   const meta = GoalMetadata[profile.goal];
   const goalStr = profile.goal === FitnessGoal.CUSTOM 
     ? `自定義目標：${profile.customGoalText}` 
-    : `${meta.label} (焦點：${meta.focus})`;
-
-  const personaInstructions = profile.gender === 'F' 
-    ? "語氣應偏向鼓勵、科學且注重美感比例，避免過於粗魯或純力量導向的措辭。"
-    : "語氣應保持極度冷靜、數據化、且帶有軍事化戰略感。";
+    : `${meta.label} (戰略重點：${meta.focus})`;
 
   const equipmentStr = profile.equipment?.length 
-    ? `可用器材清單：${profile.equipment.join(', ')}`
-    : "無特定器材，請提供一般性建議。";
+    ? `目前可用裝備：${profile.equipment.join(', ')}`
+    : "無特定器械。";
+
+  const systemInstruction = `
+    你現在是「David 教練」，The Matrix 系統的首席戰略官。
+    你的任務是為使用者提供冷靜、科學且具備「戰場直覺」的視覺診斷。
+    
+    [行為準則]
+    1. 語氣：冷靜但具備壓迫感的專業，結合台灣健身圈術語（如：增肌、減脂、超負荷、代償、受力感）。
+    2. 稱呼：絕對禁止使用「執行者」，必須使用使用者的暱稱「${profile.name}」。
+    3. 語言：必須使用「繁體中文 (台灣)」。
+    4. 格式：全程使用 Markdown 條列式，標題需使用 Emoji。
+  `;
 
   const prompt = `
-    你是一位極度專業且冷靜的健身戰略主導官。正在為執行者進行「視覺診斷」。
-    
-    [用戶基本資料]
+    [執行者狀態]
+    - 暱稱：${profile.name}
     - 性別：${profile.gender === 'F' ? '女性' : '男性'}
-    - 目標：${goalStr}
-    - 訓練風格：${profile.trainingPreference || '均衡訓練'}
-    - 身高：${profile.height}cm，年齡：${profile.age}歲
+    - 核心目標：${goalStr}
+    - 身高：${profile.height}cm
     - ${equipmentStr}
     
-    [輸出規範]
-    ${personaInstructions}
-    1. 使用「繁體中文」。全程使用「條列式」。
-    2. 結構：🔍 視覺特徵觀察、⚠️ 比例/代謝優化點、🛠️ 具體行動戰略 (包含有氧與阻力分配建議)、💡 教練戰略叮嚀。
+    [分析要求]
+    請針對影像進行以下維度的分析：
+    🔍 視覺特徵觀測 (視覺上的肌肉分佈、體脂感)
+    ⚠️ 弱點分析 (比例失衡或需加強部位)
+    🛠️ 戰術調整建議 (具體的動作訓練建議)
+    💡 首席戰略官叮嚀 (給 ${profile.name} 的一句話)
   `;
 
   const imagePart = {
@@ -44,21 +59,28 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview", 
       contents: { parts: [imagePart, { text: prompt }] },
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+      }
     });
     return response.text;
   } catch (error) {
-    console.error("AI Analysis Error:", error);
-    throw error;
+    console.error("David Coach Analysis Error:", error);
+    throw new Error("系統連結中斷，無法完成視覺診斷。");
   }
 };
 
+/**
+ * 戰略週報：深度分析生理矩陣並引用最新運動科學
+ */
 export const generateWeeklyReport = async (
   profile: UserProfile, 
   metrics: UserMetrics[], 
   logs: WorkoutLog[], 
   physiqueRecords: PhysiqueRecord[]
 ) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAIInstance();
   const meta = GoalMetadata[profile.goal];
   
   const recentMetrics = metrics.slice(-7).map(m => 
@@ -69,30 +91,59 @@ export const generateWeeklyReport = async (
     `- ${log.date}: 訓練焦點[${log.focus || '全方位'}], 回饋[${log.feedback || '正常'}]`
   ).join('\n');
 
+  const systemInstruction = `
+    你現在是「David 教練」，負責生成最高級別的「健身戰略週報」。
+    你需要整合生理數據、訓練日誌，並運用搜尋功能參考最新的運動營養與訓練科學。
+    
+    [重要規範]
+    1. 稱呼：必須使用「${profile.name}」，嚴禁使用「執行者」。
+    2. 語氣：專業、在地化（台灣健身術語）。
+  `;
+
   const prompt = `
-    你是一位 AI 健身戰略主導官。請針對以下數據生成「戰略週報」。
+    用戶暱稱：${profile.name}
+    成員 ID：${profile.memberId}
+    當前戰略目標：${meta.label}
     
-    [生理數據矩陣]
-    - 用戶性別：${profile.gender}
-    - 目標：${meta.label} (核心：${meta.focus})
-    - 體標趨勢：\n${recentMetrics}
-    - 訓練紀錄：\n${recentLogs}
+    [近期健身紀錄]
+    ${recentMetrics}
     
-    [要求]
-    1. 繁體中文。請根據目標調整建議重點：
-       - 若為「減脂/塑形」，應加強熱量缺口與活動量平衡的分析。
-       - 若為「增肌/力量」，應針對訓練重量與恢復進行點評。
-    2. 結構：### 🛡️ 戰略現況、### ⚖️ 執行優化、### 🥑 營養/代謝建議、### ⚠️ 警語。
+    [近一週訓練軌跡]
+    ${recentLogs}
+    
+    請根據以上數據，為 ${profile.name} 生成一份深度週報。請務必包含：
+    ### 🛡️ 戰術評估 (分析趨勢是否符合目標)
+    ### ⚖️ 動作優化 (針對訓練動作與頻率的建議)
+    ### 🥑 能量代謝建議 (基於目標的飲食建議)
+    ### ⚠️ 首席戰略官警語 (給 ${profile.name} 的最終提醒)
+    
+    *若有搜尋到相關運動科學文獻或最新趨勢，請一併引用。*
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview",
       contents: prompt,
+      config: {
+        systemInstruction: systemInstruction,
+        tools: [{ googleSearch: {} }],
+      },
     });
-    return response.text;
+
+    let outputText = response.text;
+    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (sources && sources.length > 0) {
+      outputText += "\n\n---\n**戰略參考來源：**\n";
+      sources.forEach((chunk: any) => {
+        if (chunk.web?.uri) {
+          outputText += `- [${chunk.web.title || '外部數據節點'}](${chunk.web.uri})\n`;
+        }
+      });
+    }
+
+    return outputText;
   } catch (error) {
-    console.error("AI Report Generation Error:", error);
-    throw error;
+    console.error("David Coach Report Error:", error);
+    throw new Error("戰略週報生成失敗，核心引擎同步異常。");
   }
 };
