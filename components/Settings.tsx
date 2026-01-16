@@ -1,16 +1,19 @@
 
 import React, { useState, useMemo } from 'react';
 import { UserProfile, FitnessGoal, GoalMetadata } from '../types';
-import { Save, Plus, CheckCircle, Sliders, Target, User as UserIcon, X } from 'lucide-react';
+import { testConnection } from '../services/geminiService';
+import { Save, Plus, CheckCircle, Target, User as UserIcon, X, BookOpen, Zap, AlertTriangle, Loader2 } from 'lucide-react';
 
 interface SettingsProps {
   profile: UserProfile;
   setProfile: (p: UserProfile) => void;
+  onReplayOnboarding: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
+const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboarding }) => {
   const [showSaved, setShowSaved] = useState(false);
   const [newEqInput, setNewEqInput] = useState('');
+  const [testStatus, setTestStatus] = useState<'IDLE' | 'TESTING' | 'SUCCESS' | 'FAIL'>('IDLE');
 
   const baseEquipment = [
     '啞鈴', '槓鈴', '纜繩機', '深蹲架', '史密斯機', 
@@ -40,7 +43,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
     if (!trimmed) return;
     
     const pool = profile.customEquipmentPool || [];
-    if (pool.includes(trimmed)) {
+    if (pool.includes(trimmed) || baseEquipment.includes(trimmed)) {
       setNewEqInput('');
       return;
     }
@@ -72,6 +75,13 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
     setTimeout(() => setShowSaved(false), 2000);
   };
 
+  const handleTestConnection = async () => {
+    setTestStatus('TESTING');
+    const result = await testConnection();
+    setTestStatus(result ? 'SUCCESS' : 'FAIL');
+    setTimeout(() => setTestStatus('IDLE'), 3000);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-10 pb-32 overflow-hidden px-2">
       <header className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-gray-100 pb-8 gap-6">
@@ -83,7 +93,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
           onClick={handleSave}
           className="bg-[#bef264] text-black px-10 py-4 font-black uppercase tracking-widest text-[11px] hover:bg-black hover:text-[#bef264] transition-all flex items-center justify-center gap-4 shadow-xl active:scale-95"
         >
-          {showSaved ? <><CheckCircle size={14} /> 已儲存</> : <><Save size={14} /> 儲存變更</>}
+          {showSaved ? <><CheckCircle size={14} /> 已儲存變更</> : <><Save size={14} /> 儲存變更</>}
         </button>
       </header>
 
@@ -96,7 +106,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
             </h3>
             <div className="space-y-6">
               <div>
-                <label className="block text-[8px] font-black uppercase tracking-widest mb-2 text-gray-400">用戶暱稱</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-gray-400">用戶暱稱</label>
                 <input
                   type="text"
                   value={profile.name}
@@ -106,7 +116,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
               </div>
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-[8px] font-black uppercase tracking-widest mb-2 text-gray-400">年齡</label>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-gray-400">年齡</label>
                   <input
                     type="number"
                     value={profile.age}
@@ -115,7 +125,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[8px] font-black uppercase tracking-widest mb-2 text-gray-400">身高 (CM)</label>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-gray-400">身高 (CM)</label>
                   <input
                     type="number"
                     value={profile.height}
@@ -146,13 +156,14 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
                   </button>
                   {value === FitnessGoal.CUSTOM && profile.goal === FitnessGoal.CUSTOM && (
                     <div className="animate-in slide-in-from-top-2">
-                       <label className="text-[8px] font-black text-gray-400 uppercase mb-1 block">請輸入您的自訂健身願景：</label>
+                       <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">請輸入您的自訂健身願景：</label>
                        <textarea 
                          value={profile.customGoalText || ''}
                          onChange={e => handleChange('customGoalText', e.target.value)}
                          placeholder="例如：在三個月內完成首次半馬，且體重不掉..."
-                         className="w-full bg-gray-50 border border-gray-100 p-3 text-xs font-bold outline-none focus:border-black resize-none h-20"
+                         className="w-full bg-gray-50 border border-gray-100 p-3 text-xs font-bold outline-none focus:border-black resize-none h-24 shadow-inner"
                        />
+                       <p className="text-[8px] text-lime-600 font-black mt-2 animate-pulse uppercase">目標將即時更新至戰略面板</p>
                     </div>
                   )}
                 </div>
@@ -172,7 +183,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
                   <div key={item} className="relative group">
                     <button
                       onClick={() => toggleEquipment(item)}
-                      className={`w-full px-3 py-4 text-left text-[10px] font-black uppercase tracking-tight border transition-all ${
+                      className={`w-full px-3 py-4 text-left text-[11px] font-black uppercase tracking-tight border transition-all ${
                         (profile.equipment || []).includes(item)
                           ? 'bg-[#bef264] border-[#bef264] text-black shadow-sm'
                           : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
@@ -194,8 +205,8 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
             </div>
 
             <div className="pt-10 border-t border-gray-100">
-              <label className="block text-[8px] font-black uppercase tracking-widest mb-3 text-gray-400">自訂資源 (Expansion)</label>
-              <div className="flex gap-2">
+              <label className="block text-[10px] font-black uppercase tracking-widest mb-3 text-gray-400">自訂資源 (Expansion)</label>
+              <form onSubmit={(e) => {e.preventDefault(); addCustomEquipment();}} className="flex gap-2">
                 <input
                   type="text"
                   value={newEqInput}
@@ -204,13 +215,44 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile }) => {
                   className="flex-1 bg-white border border-gray-200 px-4 h-12 text-sm font-bold outline-none focus:border-black"
                 />
                 <button 
-                  onClick={addCustomEquipment} 
+                  type="submit"
                   className="w-12 h-12 bg-black text-[#bef264] flex items-center justify-center hover:bg-lime-400 hover:text-black transition-all"
                 >
                   <Plus size={20} />
                 </button>
-              </div>
+              </form>
             </div>
+          </div>
+          
+          <div className="pt-10 border-t border-gray-100">
+            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest mb-4">系統教學</h3>
+            <button
+              onClick={onReplayOnboarding}
+              className="w-full bg-white border border-gray-200 text-gray-500 px-6 py-4 font-black uppercase tracking-widest text-[11px] hover:border-black hover:text-black transition-all flex items-center justify-center gap-4 shadow-sm"
+            >
+              <BookOpen size={14} /> 重新啟動新手教學
+            </button>
+          </div>
+
+          <div className="pt-10 border-t border-gray-100">
+            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest mb-4">系統診斷 (DIAGNOSTICS)</h3>
+            <button
+              onClick={handleTestConnection}
+              disabled={testStatus === 'TESTING'}
+              className={`w-full border px-6 py-4 font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-4 shadow-sm
+                ${testStatus === 'SUCCESS' ? 'bg-[#bef264] border-[#bef264] text-black' : 
+                  testStatus === 'FAIL' ? 'bg-red-500 border-red-500 text-white' : 
+                  'bg-black text-white border-black hover:bg-gray-800'}`}
+            >
+               {testStatus === 'TESTING' ? <Loader2 className="animate-spin" size={14} /> : 
+                testStatus === 'SUCCESS' ? <CheckCircle size={14} /> : 
+                testStatus === 'FAIL' ? <AlertTriangle size={14} /> : 
+                <Zap size={14} />}
+               {testStatus === 'TESTING' ? 'TESTING UPLINK...' : 
+                testStatus === 'SUCCESS' ? 'SYSTEM ONLINE' : 
+                testStatus === 'FAIL' ? 'CONNECTION FAILED' : 
+                '測試 AI 核心連線'}
+            </button>
           </div>
         </div>
       </div>

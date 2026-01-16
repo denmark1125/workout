@@ -190,16 +190,16 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
                  <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">動作清單項目 EXERCISE_LIST</p>
                  <div className="space-y-4">
                     <input placeholder="動作名稱，如：槓鈴臥推" value={exName} onChange={e => setExName(e.target.value)} className="w-full bg-white px-5 py-4 text-base font-bold shadow-sm outline-none border border-transparent focus:border-black" />
-                    <div className="grid grid-cols-3 gap-3">
-                       <div className="space-y-2">
+                    <div className="flex flex-wrap gap-3">
+                       <div className="flex-1 min-w-[80px] space-y-2">
                          <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest block text-center">重量 (KG)</label>
                          <input type="number" placeholder="0" value={exWeight} onChange={e => setExWeight(e.target.value)} className="w-full bg-white p-3 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-lg" />
                        </div>
-                       <div className="space-y-2">
+                       <div className="flex-1 min-w-[80px] space-y-2">
                          <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest block text-center">次數</label>
                          <input type="number" placeholder="0" value={exReps} onChange={e => setExReps(e.target.value)} className="w-full bg-white p-3 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-lg" />
                        </div>
-                       <div className="space-y-2">
+                       <div className="flex-1 min-w-[80px] space-y-2">
                          <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest block text-center">組數</label>
                          <input type="number" placeholder="1" value={exSets} onChange={e => setExSets(e.target.value)} className="w-full bg-white p-3 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-lg" />
                        </div>

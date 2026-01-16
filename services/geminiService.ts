@@ -8,6 +8,25 @@ const getAIInstance = () => {
 };
 
 /**
+ * 測試 AI 連線狀態 (System Diagnostics)
+ * 用於確認 API Key 是否有效且能正常存取 Gemini 模型
+ */
+export const testConnection = async (): Promise<boolean> => {
+  const ai = getAIInstance();
+  try {
+    // 使用輕量級模型進行快速 Ping 測試
+    await ai.models.generateContent({
+      model: "gemini-3-flash-preview", 
+      contents: "System Check: Ping",
+    });
+    return true;
+  } catch (error) {
+    console.error("AI Core Uplink Failed:", error);
+    return false;
+  }
+};
+
+/**
  * 視覺診斷：由 David 教練進行體態影像分析
  */
 export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {

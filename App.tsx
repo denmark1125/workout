@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import AuthScreen from './components/AuthScreen';
@@ -11,12 +11,12 @@ import TrainingJournal from './components/TrainingJournal';
 import AdminPanel from './components/AdminPanel';
 import RewardVault from './components/RewardVault'; 
 import DailyRewardModal from './components/DailyRewardModal';
-import Onboarding from './components/Onboarding'; // 新增
+import Onboarding from './components/Onboarding'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
 import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
 import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -26,7 +26,10 @@ const App: React.FC = () => {
   
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [pendingReward, setPendingReward] = useState<any>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false); // 新增
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState<string | null>(null);
+
+  const timeoutRef = useRef<any>(null);
 
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
     return localStorage.getItem('matrix_active_user');
@@ -53,6 +56,35 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [physiqueRecords, setPhysiqueRecords] = useState<PhysiqueRecord[]>([]);
 
+  // 智慧工作階段管理 (閒置登出)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => handleLogout(true), 3 * 60 * 60 * 1000); // 3 小時自動登出
+      
+      const warning1 = setTimeout(() => setShowTimeoutWarning("1.5小時"), 1.5 * 60 * 60 * 1000);
+      const warning2 = setTimeout(() => setShowTimeoutWarning("2小時"), 2 * 60 * 60 * 1000);
+
+      const events = ['mousemove', 'keydown', 'touchstart'];
+      const eventHandler = () => {
+        clearTimeout(warning1);
+        clearTimeout(warning2);
+        resetTimer();
+        events.forEach(event => window.removeEventListener(event, eventHandler));
+      };
+      
+      events.forEach(event => window.addEventListener(event, eventHandler, { once: true }));
+    };
+
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutRef.current);
+    };
+  }, [isAuthenticated]);
+
   useEffect(() => {
     setIsAdmin(currentMemberId === 'admin_roots');
     const checkDb = () => setDbConnected(db !== null);
@@ -74,22 +106,31 @@ const App: React.FC = () => {
         ]);
         
         if (p) {
-          const today = new Date().toLocaleDateString('en-CA');
+          const today = new Date();
+          const todayStr = today.toLocaleDateString('en-CA');
           let updatedProfile = { ...p };
           
-          // 教學檢測
           if (updatedProfile.hasCompletedOnboarding === false) {
             setShowOnboarding(true);
           }
+          
+          const lastLogin = new Date(updatedProfile.lastLoginDate || todayStr);
+          const diffDays = (today.getTime() - lastLogin.getTime()) / (1000 * 3600 * 24);
+          
+          if (diffDays >= 90) {
+            if(confirm("David 教練：偵測到您已超過90天未同步數據。需要重新啟動戰術教學，複習系統操作嗎？")) {
+               setShowOnboarding(true);
+            }
+          }
 
-          const hasClaimedToday = updatedProfile.lastRewardClaimDate === today;
+          const hasClaimedToday = updatedProfile.lastRewardClaimDate === todayStr;
           if (!hasClaimedToday) {
              const rewardIndex = (updatedProfile.collectedRewardIds?.length || 0) % REWARDS_DATABASE.length;
              setPendingReward(REWARDS_DATABASE[rewardIndex]);
              setShowRewardModal(true);
           }
 
-          if (updatedProfile.lastLoginDate !== today) {
+          if (updatedProfile.lastLoginDate !== todayStr) {
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = yesterday.toLocaleDateString('en-CA');
@@ -98,7 +139,7 @@ const App: React.FC = () => {
             } else {
               updatedProfile.loginStreak = 1;
             }
-            updatedProfile.lastLoginDate = today;
+            updatedProfile.lastLoginDate = todayStr;
             syncToCloud('profiles', updatedProfile, currentMemberId);
           }
           setProfile(updatedProfile);
@@ -116,30 +157,6 @@ const App: React.FC = () => {
   }, [isAuthenticated, currentMemberId]);
 
   useEffect(() => {
-    if (!isAuthenticated || !currentMemberId || metrics.length === 0) return;
-    
-    const latestMetric = metrics[metrics.length - 1];
-    const calculated = calculateMatrix(profile, latestMetric);
-    const updatedCollected = [...(profile.collectedRewardIds || [])];
-    let changed = false;
-
-    if (calculated.score >= 80 && !updatedCollected.includes(ACHIEVEMENT_REWARDS['high_score'].id)) {
-      updatedCollected.push(ACHIEVEMENT_REWARDS['high_score'].id);
-      changed = true;
-    }
-
-    const totalMinutes = logs.reduce((acc, curr) => acc + (curr.durationMinutes || 0), 0);
-    if (totalMinutes >= 600 && !updatedCollected.includes(ACHIEVEMENT_REWARDS['long_train_1h'].id)) {
-      updatedCollected.push(ACHIEVEMENT_REWARDS['long_train_1h'].id);
-      changed = true;
-    }
-
-    if (changed) {
-      setProfile(prev => ({ ...prev, collectedRewardIds: updatedCollected }));
-    }
-  }, [metrics, logs, isAuthenticated]);
-
-  useEffect(() => {
     if (!isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
     const timer = setTimeout(() => {
       syncToCloud('profiles', profile, currentMemberId);
@@ -154,13 +171,11 @@ const App: React.FC = () => {
     if (!pendingReward) return;
     const today = new Date().toLocaleDateString('en-CA');
     const newCollected = [...(profile.collectedRewardIds || []), pendingReward.id];
-    
     setProfile(prev => ({
       ...prev,
       collectedRewardIds: Array.from(new Set(newCollected)),
       lastRewardClaimDate: today
     }));
-    
     setShowRewardModal(false);
     setPendingReward(null);
   };
@@ -168,6 +183,7 @@ const App: React.FC = () => {
   const handleOnboardingComplete = () => {
     setProfile(prev => ({ ...prev, hasCompletedOnboarding: true }));
     setShowOnboarding(false);
+    setActiveTab('dashboard');
   };
 
   const handleLogin = async (id: string, pass: string) => {
@@ -189,7 +205,6 @@ const App: React.FC = () => {
   const handleRegister = async (newProfile: UserProfile, initialWeight: number) => {
     setIsSyncing(true);
     try {
-      // 新註冊帳號開啟新手教學
       const profileToSave = { ...newProfile, hasCompletedOnboarding: false };
       const initialMetric: UserMetrics = {
         id: Date.now().toString(),
@@ -221,12 +236,13 @@ const App: React.FC = () => {
     setLoginError(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = (isAuto = false) => {
     sessionStorage.removeItem('matrix_session');
     localStorage.removeItem('matrix_active_user');
     setCurrentMemberId(null);
     setIsAuthenticated(false);
     setActiveTab('dashboard');
+    if (isAuto) alert("系統偵測到您已閒置超過3小時，為安全起見已自動登出。");
   };
 
   if (!isAuthenticated) {
@@ -243,27 +259,19 @@ const App: React.FC = () => {
         setActiveTab={setActiveTab} 
         memberId={currentMemberId || ''} 
         isAdmin={isAdmin} 
-        onLogout={handleLogout}
+        onLogout={() => handleLogout()}
         hasPendingReward={rewardPending}
+        profile={profile}
       />
       <main className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 overflow-x-hidden relative">
         <div className="animate-in fade-in duration-500">
-          {activeTab === 'dashboard' && (
-            <DataEngine 
-              profile={profile} 
-              metrics={metrics} 
-              onAddMetric={(m) => setMetrics([...metrics, m])} 
-              onUpdateMetrics={setMetrics}
-              onUpdateProfile={setProfile} 
-              isDbConnected={dbConnected} 
-            />
-          )}
+          {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} />}
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} />}
           {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
-          {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} />}
+          {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => setShowOnboarding(true)} />}
         </div>
         
         {isSyncing && (
@@ -272,22 +280,29 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {showRewardModal && pendingReward && (
-          <DailyRewardModal 
-            reward={pendingReward} 
-            streak={profile.loginStreak || 1} 
-            onClaim={handleClaimReward} 
-          />
+        {showRewardModal && pendingReward && !showOnboarding && (
+          <DailyRewardModal reward={pendingReward} streak={profile.loginStreak || 1} onClaim={handleClaimReward} />
         )}
 
-        {showOnboarding && (
-          <Onboarding 
-            userName={profile.name} 
-            onComplete={handleOnboardingComplete} 
-          />
+        {showOnboarding && <Onboarding userName={profile.name} onComplete={handleOnboardingComplete} onStepChange={setActiveTab} />}
+        
+        {showTimeoutWarning && (
+          <div className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+            <div className="bg-white p-10 max-w-md w-full border-4 border-yellow-400 shadow-2xl text-center space-y-8 animate-in zoom-in duration-300">
+              <AlertTriangle size={48} className="mx-auto text-yellow-500" />
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black uppercase tracking-tighter">閒置提醒</h3>
+                <p className="text-gray-600 font-bold">David 教練：偵測到您已閒置超過 {showTimeoutWarning}，請問還在訓練嗎？</p>
+              </div>
+              <div className="flex gap-4">
+                <button onClick={() => handleLogout()} className="flex-1 py-4 bg-gray-100 text-gray-500 font-black uppercase text-xs tracking-widest hover:bg-red-500 hover:text-white transition-all">登出</button>
+                <button onClick={() => setShowTimeoutWarning(null)} className="flex-1 py-4 bg-black text-white font-black uppercase text-xs tracking-widest hover:bg-[#bef264] hover:text-black transition-all">繼續訓練</button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
-      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} isAdmin={isAdmin} />
+      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => handleLogout()} isAdmin={isAdmin} />
     </div>
   );
 };

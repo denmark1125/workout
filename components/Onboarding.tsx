@@ -1,41 +1,52 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Terminal, ArrowRight, Zap, Target, ShieldCheck, X } from 'lucide-react';
 
 interface OnboardingProps {
   userName: string;
   onComplete: () => void;
+  onStepChange?: (tabId: string) => void; 
 }
 
-const Onboarding: React.FC<OnboardingProps> = ({ userName, onComplete }) => {
+const Onboarding: React.FC<OnboardingProps> = ({ userName, onComplete, onStepChange }) => {
   const [step, setStep] = useState(0);
 
   const steps = [
     {
-      title: "歡迎連結至 MATRIX AI",
-      icon: <Terminal className="w-12 h-12 text-[#bef264]" />,
-      content: `你好，${userName}。我是 David 教練，負責監管你的進化軌跡。在這裡，每一滴汗水都將被轉化為數據，每一筆紀錄都是你對抗平庸的戰報。準備好啟動你的健身矩陣了嗎？`,
-      highlight: null
+      id: 'welcome',
+      title: "連結 MATRIX 系統",
+      icon: <Terminal className="w-8 h-8 text-[#bef264]" />,
+      content: `你好，${userName}。David 教練已上線。為了確保你的進化效率，我將快速校準你的系統介面。`,
+      tab: 'dashboard'
     },
     {
-      title: "生理矩陣：精準監控",
-      icon: <Zap className="w-12 h-12 text-[#bef264]" />,
-      content: "這是你的核心數據引擎。我們會追蹤 BMI、FFMI 與體脂變化。透過雷達圖，你可以一眼看出自己的強項與弱點。記住，無法衡量的東西就無法優化。",
-      highlight: "data-engine"
+      id: 'data',
+      title: "數據引擎 DATA ENGINE",
+      icon: <Zap className="w-8 h-8 text-[#bef264]" />,
+      content: "注意畫面上的「DATA ENGINE」。這是你的生理儀表板，雷達圖與趨勢線會即時反映你的強項與弱點。記住，無法衡量的東西就無法強化。",
+      tab: 'dashboard'
     },
     {
-      title: "訓練日誌：意志的封存",
-      icon: <Target className="w-12 h-12 text-[#bef264]" />,
-      content: "每次踏入健身房都是一場戰役。請利用日誌系統詳細記錄你的組數、重量與體感。這些原始資料將成為 AI 戰略分析的核心燃料。",
-      highlight: "journal"
+      id: 'journal',
+      title: "戰術日誌 TACTICAL LOG",
+      icon: <Target className="w-8 h-8 text-[#bef264]" />,
+      content: "切換至訓練日誌。這裡不只是紀錄次數，更是封存你意志力的地方。每次訓練結束後的「Commit」，都是給 AI 分析引擎的重要燃料。",
+      tab: 'journal'
     },
     {
-      title: "AI 首席戰略：突破極限",
-      icon: <ShieldCheck className="w-12 h-12 text-[#bef264]" />,
-      content: "體態診斷模組會運用視覺分析糾正你的弱點，而戰略週報則會結合全球最新的運動科學，為你量身打造下週的進化計畫。",
-      highlight: "ai-module"
+      id: 'ai',
+      title: "AI 戰略週報",
+      icon: <ShieldCheck className="w-8 h-8 text-[#bef264]" />,
+      content: "最後，週報系統會結合全球運動科學，為你生成每週進化建議。現在，系統校準完畢。開始你的訓練。",
+      tab: 'report'
     }
   ];
+
+  useEffect(() => {
+    if (onStepChange) {
+      onStepChange(steps[step].tab);
+    }
+  }, [step]);
 
   const nextStep = () => {
     if (step < steps.length - 1) {
@@ -48,54 +59,46 @@ const Onboarding: React.FC<OnboardingProps> = ({ userName, onComplete }) => {
   const current = steps[step];
 
   return (
-    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-500">
-      <div className="absolute inset-0 scanline opacity-20 pointer-events-none"></div>
+    // 修改：背景改為 pointer-events-none 且透明，讓使用者能看到後面
+    <div className="fixed inset-0 z-[300] flex flex-col justify-end items-center md:items-end p-6 md:p-12 pointer-events-none">
       
-      {/* 跳過按鈕 */}
-      <button 
-        onClick={onComplete}
-        className="absolute top-8 right-8 text-gray-400 hover:text-[#bef264] flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all z-[310]"
-      >
-        SKIP TUTORIAL 跳過教學 <X size={16} />
-      </button>
+      {/* 遮罩：僅在周圍稍微變暗，不完全遮擋 */}
+      <div className="absolute inset-0 bg-black/10 transition-colors pointer-events-auto" onClick={onComplete}></div>
 
-      <div className="w-full max-w-xl bg-white border-t-8 border-black p-10 space-y-8 relative shadow-[0_0_150px_rgba(190,242,100,0.25)] animate-in zoom-in duration-500">
-        <div className="flex justify-between items-center border-b border-gray-100 pb-6">
-          <div className="flex items-center gap-3">
-             <Terminal size={16} className="text-gray-300" />
-             <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">Tactical Onboarding v2.5</p>
-          </div>
-          <p className="text-[10px] font-mono font-black bg-black text-[#bef264] px-3 py-1">
-            STEP {step + 1} / {steps.length}
-          </p>
+      <div className="w-full max-w-md bg-white border-l-8 border-black p-8 space-y-6 relative shadow-[0_20px_50px_rgba(0,0,0,0.3)] animate-in slide-in-from-bottom-10 duration-500 pointer-events-auto">
+        <div className="absolute -top-3 -left-3 w-6 h-6 bg-[#bef264] border-2 border-white rotate-45"></div>
+        
+        <div className="flex justify-between items-start">
+           <div className="flex items-center gap-3">
+              <div className="p-2 bg-black text-[#bef264]">{current.icon}</div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Onboarding Sequence</p>
+                <h2 className="text-xl font-black tracking-tighter uppercase">{current.title}</h2>
+              </div>
+           </div>
+           <button onClick={onComplete} className="text-gray-300 hover:text-black"><X size={20}/></button>
         </div>
 
-        <div className="space-y-6 min-h-[220px] flex flex-col items-center justify-center">
-          <div className="flex flex-col items-center gap-6 py-4">
-             <div className="animate-pulse">{current.icon}</div>
-             <h2 className="text-3xl font-black tracking-tighter uppercase text-center">{current.title}</h2>
-          </div>
-          <p className="text-lg font-bold text-gray-700 leading-relaxed text-center italic">
-            「{current.content}」
-          </p>
-        </div>
+        <p className="text-sm font-bold text-gray-700 leading-relaxed italic border-l-2 border-gray-100 pl-4">
+          「{current.content}」
+        </p>
 
-        <div className="space-y-4">
+        <div className="flex gap-3 pt-2">
           <button 
             onClick={nextStep}
-            className="w-full bg-black text-white py-6 font-black text-xs tracking-[0.5em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-xl flex items-center justify-center gap-4"
+            className="flex-1 bg-black text-white py-4 font-black text-[10px] tracking-[0.3em] uppercase hover:bg-[#bef264] hover:text-black transition-all flex items-center justify-center gap-2 shadow-lg"
           >
-            {step === steps.length - 1 ? '啟動戰略矩陣 START' : '理解，進入下一步 NEXT'} <ArrowRight size={18} />
+            {step === steps.length - 1 ? '啟動系統' : '下一步'} <ArrowRight size={14} />
           </button>
-          
-          {step === 0 && (
-            <button 
-              onClick={onComplete}
-              className="w-full text-center text-gray-300 hover:text-red-500 text-[10px] font-black uppercase tracking-widest pt-2"
-            >
-              我不需要引導，直接開始訓練
-            </button>
-          )}
+        </div>
+
+        <div className="flex justify-between items-center pt-2">
+           <div className="flex gap-1">
+             {steps.map((_, i) => (
+               <div key={i} className={`h-1 w-6 rounded-full transition-all ${i === step ? 'bg-black' : 'bg-gray-100'}`}></div>
+             ))}
+           </div>
+           <p className="text-[9px] font-mono font-black text-gray-300">{(step + 1).toString().padStart(2,'0')} / {steps.length.toString().padStart(2,'0')}</p>
         </div>
       </div>
     </div>

@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { UserMetrics, UserProfile } from '../types';
+import { UserMetrics, UserProfile, GoalMetadata } from '../types';
 import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus, getLocalTimestamp } from '../utils/calculations';
-import { Zap, Activity, Shield, Award, TrendingUp, History, Trash2, ChevronDown, Terminal, AlertTriangle } from 'lucide-react';
+import { TrendingUp, History, Trash2, ChevronDown, Info } from 'lucide-react';
 
 interface DataEngineProps {
   profile: UserProfile;
@@ -33,37 +33,10 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
   const [isSyncing, setIsSyncing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  const coachMessage = useMemo(() => {
-    const hour = new Date().getHours();
-    const streak = profile.loginStreak || 1;
-    const userName = profile.name || '執行者';
-    
-    // 惰性偵測：計算天數差
-    const lastLogin = profile.lastLoginDate ? new Date(profile.lastLoginDate) : new Date();
-    const today = new Date();
-    const diffTime = Math.abs(today.getTime() - lastLogin.getTime());
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays >= 2) {
-      const parts = ['胸背重量', '腿部專項', '肩膀與核心', '高強度間歇'];
-      const recommended = parts[Math.floor(Math.random() * parts.length)];
-      return `[警告] ${userName}，偵測到你已中斷連線 ${diffDays} 天。肌肉正在萎縮，意志正在動搖。David 教練建議今日強制執行「${recommended}訓練菜單」，立刻啟動，別讓昨天的努力付諸流水。`;
-    }
-    
-    let greeting = "";
-    if (hour >= 5 && hour < 12) {
-      greeting = `早安 ${userName}。晨間體徵已同步。昨天的努力正在轉化成肌肉，今天打算在哪個動作上突破極限？`;
-    } else if (hour >= 12 && hour < 18) {
-      greeting = `午安 ${userName}。系統偵測到你正處於能量高峰。這是把重訓架練爆的最佳時機，別讓藉口阻礙你的進化。`;
-    } else {
-      greeting = `晚安 ${userName}。今日的訓練數據已全數封存。肌肉正在修復與重組，好好休息，明天我們繼續變強。`;
-    }
-
-    if (streak > 3) {
-      greeting += ` (偵測到你已連續 ${streak} 天維持紀律，這份鋼鐵意志才是你最強大的裝備。)`;
-    }
-    return greeting;
-  }, [profile.loginStreak, profile.name, profile.lastLoginDate]);
+  // 取得目標標籤
+  const currentGoalLabel = profile.goal === 'CUSTOM' && profile.customGoalText 
+    ? (profile.customGoalText.length > 6 ? profile.customGoalText.substring(0,6)+'...' : profile.customGoalText)
+    : GoalMetadata[profile.goal]?.label || '未設定';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,50 +73,93 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
     shortDate: m.date.split(' ')[0].substring(5),
   }));
 
+  // 定義數據卡片樣式與資料
+  const statsCards = [
+    { 
+      label: 'BMI INDEX', 
+      sub: '體質量結構',
+      value: calculated.bmi.toFixed(1), 
+      status: getBMIStatus(calculated.bmi),
+      barColor: 'bg-[#bef264]' // Matrix Green
+    },
+    { 
+      label: 'BMR RATE', 
+      sub: '基礎代謝率',
+      value: Math.round(calculated.bmr), 
+      status: null, // BMR 通常沒有好壞之分
+      barColor: 'bg-blue-400'
+    },
+    { 
+      label: 'FFMI LEVEL', 
+      sub: '除脂體重指數',
+      value: calculated.ffmi.toFixed(1), 
+      status: getFFMIStatus(calculated.ffmi, profile.gender),
+      barColor: 'bg-purple-400'
+    },
+    { 
+      label: 'MATRIX SCORE', 
+      sub: '綜合矩陣評等',
+      value: Math.round(calculated.score), 
+      status: { label: '穩定', color: 'text-[#bef264]' }, 
+      barColor: 'bg-orange-400'
+    },
+  ];
+
   return (
-    <div className="animate-in fade-in duration-700 space-y-8 pb-32">
-      <div className="bg-black text-[#bef264] px-6 md:px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-6 border-b-2 border-[#bef264] shadow-[0_4px_20px_rgba(190,242,100,0.1)] relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1 h-full bg-[#bef264] animate-pulse"></div>
-        <div className="flex items-start gap-4 flex-1">
-          <Terminal size={20} className="mt-1 shrink-0 text-[#bef264]" />
-          <div className="space-y-1">
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-60">David Coach Command Hub</p>
-            <p className={`text-base md:text-lg font-bold italic leading-relaxed ${coachMessage.includes('[警告]') ? 'text-red-400' : 'text-white'}`}>
-              「{coachMessage}」
-            </p>
-          </div>
+    <div className="animate-in fade-in duration-700 space-y-12 pb-32">
+      {/* Header Visual Restoration */}
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b-4 border-gray-100 pb-8">
+        <div>
+          <p className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.4em] mb-2">PHYSIOLOGICAL MODULE</p>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-black uppercase leading-none">DATA ENGINE</h1>
         </div>
         
-        <div className="flex items-center gap-3 bg-[#bef264]/10 border border-[#bef264]/30 px-5 py-2.5 rounded-full shrink-0">
-          <div className={`w-2.5 h-2.5 rounded-full ${isDbConnected ? 'bg-[#bef264] animate-pulse shadow-[0_0_10px_#bef264]' : 'bg-red-500'}`}></div>
-          <p className="text-[11px] font-black tracking-[0.2em] uppercase">
-            STATUS: <span className={isDbConnected ? 'text-[#bef264]' : 'text-red-500'}>{isDbConnected ? 'CONNECTED' : 'LOCAL_ONLY'}</span>
-          </p>
+        {/* Active Protocol Box (Restored) */}
+        <div className="bg-black text-white p-6 min-w-[240px] shadow-2xl relative group overflow-hidden">
+           <div className="absolute top-0 right-0 w-16 h-16 bg-[#bef264] blur-[40px] opacity-20 group-hover:opacity-40 transition-opacity"></div>
+           <div className="flex justify-between items-start mb-2">
+             <span className="text-[9px] font-mono font-black text-gray-500 uppercase tracking-[0.2em]">PROTOCOL</span>
+             <div className="w-2 h-2 bg-[#bef264] rounded-full animate-pulse shadow-[0_0_8px_#bef264]"></div>
+           </div>
+           <p className="text-2xl font-black tracking-widest uppercase text-white relative z-10">
+             {currentGoalLabel}
+           </p>
+           {isDbConnected && (
+             <p className="text-[8px] font-mono text-[#bef264] mt-2 uppercase tracking-wider">SYNC_ACTIVE</p>
+           )}
         </div>
+      </header>
+
+      {/* Metric Cards (Restored Visuals) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        {statsCards.map((card, i) => (
+          <div key={i} className="bg-white border border-gray-100 p-8 shadow-sm hover:shadow-lg transition-all relative overflow-hidden group">
+             <div className="flex justify-between items-start mb-6">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{card.label}</span>
+                <Info size={14} className="text-gray-200" />
+             </div>
+             
+             <div className="flex items-baseline gap-3 mb-2">
+                <span className="text-5xl md:text-6xl font-black text-black tracking-tighter leading-none">{card.value}</span>
+                {card.status && (
+                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 border ${card.status.color.includes('lime') ? 'border-lime-200 text-lime-600' : card.status.color.includes('red') ? 'border-red-200 text-red-500' : 'border-gray-200 text-gray-400'}`}>
+                    {card.status.label.split(' ')[0]}
+                  </span>
+                )}
+             </div>
+             
+             <p className="text-[10px] font-bold text-gray-300 mb-6">{card.sub}</p>
+             
+             {/* Progress Bar Visual */}
+             <div className="h-1.5 w-full bg-gray-50 rounded-full overflow-hidden">
+                <div className={`h-full ${card.barColor} w-2/3 group-hover:w-full transition-all duration-1000`}></div>
+             </div>
+          </div>
+        ))}
       </div>
 
       <div className="flex flex-col xl:flex-row gap-8">
         <div className="flex-1 space-y-8">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="metric-cards">
-            {[
-              { label: 'BMI 指數', value: calculated.bmi.toFixed(1), icon: <Activity size={18} />, status: getBMIStatus(calculated.bmi) },
-              { label: 'BMR 代謝', value: Math.round(calculated.bmr), icon: <Zap size={18} /> },
-              { label: 'FFMI 指標', value: calculated.ffmi.toFixed(1), icon: <Shield size={18} />, status: getFFMIStatus(calculated.ffmi, profile.gender) },
-              { label: '健身評分', value: Math.round(calculated.score), icon: <Award size={18} />, status: { label: '卓越', color: 'border-lime-200 text-lime-500 bg-lime-50/10' } },
-            ].map((card, i) => (
-              <div key={i} className="bg-white border border-gray-100 p-6 shadow-sm hover:border-black transition-all">
-                <div className="flex items-center gap-2 text-gray-300 mb-3">
-                  {card.icon}
-                  <span className="text-[11px] font-black uppercase tracking-widest">{card.label}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-3xl font-black tracking-tighter">{card.value}</span>
-                  {card.status && <span className={`mt-3 px-2 py-1 text-[10px] font-black uppercase border w-fit ${card.status.color}`}>{card.status.label}</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-[#fcfcfc] border border-gray-100 p-6 h-[350px]" id="radar-chart">
                <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-4">RADAR_ANALYSIS</div>
@@ -202,7 +218,8 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
         </div>
 
         <div className="w-full xl:w-80" id="data-input">
-          <form onSubmit={handleSubmit} className="bg-white border-2 border-black p-8 space-y-8 shadow-xl">
+          <form onSubmit={handleSubmit} className="bg-white border-2 border-black p-8 space-y-8 shadow-xl relative">
+            <div className="absolute top-0 right-0 w-0 h-0 border-t-[40px] border-r-[40px] border-t-transparent border-r-[#bef264]"></div>
             <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4">健身紀錄輸入 (INPUT_NODE)</p>
             <div className="space-y-6">
               <div>
@@ -237,9 +254,9 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
               </div>
               <button 
                 disabled={isSyncing}
-                className="w-full bg-black text-white py-5 font-black text-[11px] tracking-[0.4em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-md"
+                className="w-full bg-black text-white py-5 font-black text-[11px] tracking-[0.4em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-md group"
               >
-                {isSyncing ? 'SYNCING...' : '更新健身數據 COMMIT'}
+                {isSyncing ? 'SYNCING...' : <span className="flex items-center justify-center gap-2">更新健身數據 <span className="group-hover:translate-x-1 transition-transform">→</span></span>}
               </button>
             </div>
           </form>
