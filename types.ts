@@ -69,7 +69,16 @@ export interface UserProfile {
   collectedRewardIds?: number[];
   unlockedAchievementIds?: string[];
   trainingPreference?: 'WEIGHTS' | 'CARDIO' | 'BALANCED';
-  hasCompletedOnboarding?: boolean; // 新增：是否完成新手教學
+  hasCompletedOnboarding?: boolean;
+  
+  // Gatekeeper & Role Fields
+  role?: 'admin' | 'user';
+  lastDailyFeedbackDate?: string;     // YYYY-MM-DD
+  lastPhysiqueAnalysisDate?: string;  // YYYY-MM-DD
+  weeklyReportUsage?: { 
+    weekId: string; // "2026-W03"
+    count: number; 
+  };
 }
 
 export interface CalculatedData {

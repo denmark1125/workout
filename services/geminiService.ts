@@ -1,10 +1,10 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
+import { getTaiwanDate, getTaiwanWeekId } from "../utils/calculations";
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  // Vite 標準寫法：直接讀取 VITE_ 開頭的變數
   const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;
   
   if (!apiKey) {
@@ -14,15 +14,80 @@ const getAIInstance = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+// --- Gatekeeper Logic (資源控管) ---
+
+interface AccessCheckResult {
+  allowed: boolean;
+  reason?: string;
+}
+
+const checkAccess = (type: 'daily' | 'physique' | 'weekly', profile: UserProfile): AccessCheckResult => {
+  const today = getTaiwanDate();
+  const currentWeek = getTaiwanWeekId();
+  
+  // Admin Bypass (Root Access)
+  if (profile.role === 'admin') return { allowed: true };
+
+  switch (type) {
+    case 'daily':
+      if (profile.lastDailyFeedbackDate === today) {
+        return { allowed: false, reason: "Daily limit reached" };
+      }
+      return { allowed: true };
+      
+    case 'physique':
+      if (profile.lastPhysiqueAnalysisDate === today) {
+        return { allowed: false, reason: "Physique scan limited to once per day" };
+      }
+      return { allowed: true };
+      
+    case 'weekly':
+      // 檢查是否為當週，若是新的一週則重置 (邏輯由 App 端狀態更新處理，這裡僅檢查當前值)
+      // 若 profile 紀錄的是舊週次，則視為允許 (因為將會更新為新週次 count 1)
+      if (profile.weeklyReportUsage?.weekId === currentWeek) {
+        if (profile.weeklyReportUsage.count >= 2) {
+          return { allowed: false, reason: "Weekly report limit (2/week) reached" };
+        }
+      }
+      return { allowed: true };
+      
+    default:
+      return { allowed: false };
+  }
+};
+
+// --- Token Pruning (資料修剪) ---
+
+const pruneLogs = (logs: WorkoutLog[]) => {
+  return logs.map(l => ({
+    d: l.date,
+    f: l.focus, // Focus
+    e: l.exercises.map(ex => `${ex.name}:${ex.weight}kgx${ex.reps}x${ex.sets}`).join('|') // Compact format
+  }));
+};
+
+const SYSTEM_INSTRUCTION = `
+你現在是「David 教練」，The Matrix 系統的首席戰略官。
+語氣：冷靜、專業、戰場直覺、台灣健身術語、激勵人心。
+限制：回答簡潔有力，禁止冗長廢話。
+`;
+
+// --- Public API Functions ---
+
 /**
- * 測試 AI 連線狀態
+ * 測試 AI 連線狀態 (僅限 Admin)
  */
-export const testConnection = async (): Promise<boolean> => {
+export const testConnection = async (role: string = 'user'): Promise<boolean> => {
+  if (role !== 'admin') {
+    console.warn("Access Denied: Non-admin attempted uplink test.");
+    return false;
+  }
+  
   try {
     const ai = getAIInstance();
     await ai.models.generateContent({
       model: "gemini-3-flash-preview", 
-      contents: "System Check: Ping",
+      contents: "Ping",
     });
     return true;
   } catch (error) {
@@ -32,107 +97,91 @@ export const testConnection = async (): Promise<boolean> => {
 };
 
 /**
- * David 教練：首頁常駐問候與督促 (完全本地化版本)
- * 不再連接 AI，改為本地邏輯判斷時間與季節，確保瞬間回應且穩定。
+ * David 教練：首頁常駐問候 (本地邏輯，不消耗 Token)
  */
 export const getDavidGreeting = async (profile: UserProfile): Promise<string> => {
   const hour = new Date().getHours();
-  const month = new Date().getMonth() + 1; // 1-12
-  
-  // 優先使用 Member ID (巨巨代號)，除非用戶有設定非預設的暱稱
+  // 修改：優先使用用戶名稱 (User Name)，不再使用 Member ID
   const nameToUse = (profile.name && profile.name !== 'User') 
     ? profile.name 
-    : (profile.memberId || '巨巨');
+    : '執行者';
 
   let quotes: string[] = [];
+  if (hour >= 5 && hour < 11) quotes = [`早安，${nameToUse}。清晨適合專注，執行任務吧。`, `一日之計在於晨。${nameToUse}，喚醒神經連結。`];
+  else if (hour >= 11 && hour < 14) quotes = [`午安，${nameToUse}。別忘了燃料補充。`, `正午時分，保持代謝運轉。`];
+  else if (hour >= 14 && hour < 18) quotes = [`下午好，${nameToUse}。生理機能高峰，挑戰極限。`, `專注在你能控制的事情上。`];
+  else if (hour >= 18 && hour < 23) quotes = [`晚上好，${nameToUse}。用汗水洗淨思緒。`, `卸下防備，這裡只有你和重量。`];
+  else quotes = [`夜深了，${nameToUse}。修復是變強的關鍵，早點休息。`, `堅持很孤獨，但這是強者的路。`];
 
-  // 時段邏輯 (Time Context)
-  if (hour >= 5 && hour < 11) {
-    // 清晨
-    quotes = [
-      `早安，${nameToUse}。系統已啟動。清晨的寧靜適合專注，別浪費了這段時光。`,
-      `一日之計在於晨。${nameToUse}，喚醒你的神經連結，準備執行今日任務。`,
-      `早安。大腦或許還想待機，但你的身體已經準備好進化了。`,
-      `清晨空氣稀薄而純淨。${nameToUse}，這是屬於強者的時段。`,
-      `早安，${nameToUse}。不管天氣如何，先把第一組熱身做完再說。`
-    ];
-  } else if (hour >= 11 && hour < 14) {
-    // 正午
-    quotes = [
-      `午安，${nameToUse}。忙碌之餘別忘了補充燃料，這是你的能量來源。`,
-      `正午時分。短暫的抽離與訓練，能讓你的下午運算更有效率。`,
-      `別因為忙碌而妥協飲食。${nameToUse}，紀律體現在每一個選擇裡。`,
-      `系統提示：該喝水了。保持代謝運轉是戰略基礎。`,
-      `休息是為了走更長的路，${nameToUse}。調整呼吸，準備下半場。`
-    ];
-  } else if (hour >= 14 && hour < 18) {
-    // 下午
-    quotes = [
-      `下午好，${nameToUse}。生理機能此刻正處高峰，去挑戰你的極限重量。`,
-      `別被午後的倦意擊倒。${nameToUse}，意志力是你最強的興奮劑。`,
-      `距離下班還有點時間，但你的肌肉渴望著張力。保持專注。`,
-      `還記得你的目標嗎？${nameToUse}，現在就是縮短距離的最佳時刻。`,
-      `下午好，${nameToUse}。專注在那些你能控制的事情上：呼吸、動作、節奏。`
-    ];
-  } else if (hour >= 18 && hour < 23) {
-    // 晚間
-    quotes = [
-      `晚上好，${nameToUse}。卸下一天的防備，這裡只有你和重量。`,
-      `把白天的壓力轉化為推力。${nameToUse}，這是屬於你的修復程式。`,
-      `城市喧囂，但這裡只有鐵塊的聲音。享受這份純粹。`,
-      `別把疲憊帶回家。用汗水洗淨思緒，今晚你會睡得更好，${nameToUse}。`,
-      `晚上好。今天過得如何？無論如何，訓練會讓一切變好。`
-    ];
-  } else {
-    // 深夜
-    quotes = [
-      `夜深了，${nameToUse}。這份堅持很孤獨，但這也是你與眾不同的原因。`,
-      `萬籟俱寂。${nameToUse}，注意組間休息，深夜訓練更考驗專注力。`,
-      `還在執行任務？${nameToUse}，你的意志力令人敬佩，但睡眠也是訓練的一環。`,
-      `系統提示：深夜時段，請專注感受肌肉收縮，安全優先。`,
-      `辛苦了，${nameToUse}。練完早點休息，修復是變強的關鍵。`
-    ];
-  }
-
-  // 季節微調 (Seasonal Context)
-  if (month >= 12 || month <= 2) { // 冬季
-     if (Math.random() > 0.7) quotes.push(`氣溫較低，${nameToUse}，請務必延長熱身時間，保護關節運作。`);
-  } else if (month >= 6 && month <= 8) { // 夏季
-     if (Math.random() > 0.7) quotes.push(`天氣炎熱，${nameToUse}，注意水分流失，保持電解質平衡。`);
-  }
-
-  // 隨機選取一句
-  const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
-  return `David 教練：${randomQuote}`;
+  return `David 教練：${quotes[Math.floor(Math.random() * quotes.length)]}`;
 };
 
 /**
- * 視覺診斷 (使用 AI)
+ * 獲取今日訓練反饋 (Daily Feedback)
+ * 限制：每日 1 次，有快取
  */
-export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
-  const meta = GoalMetadata[profile.goal];
-  const goalStr = profile.goal === FitnessGoal.CUSTOM 
-    ? `自定義目標：${profile.customGoalText}` 
-    : `${meta.label} (戰略重點：${meta.focus})`;
+export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLog): Promise<string> => {
+  const today = getTaiwanDate();
+  const cacheKey = `matrix_feedback_${profile.memberId}_${today}`;
 
-  const equipmentStr = profile.equipment?.length 
-    ? `目前可用裝備：${profile.equipment.join(', ')}`
-    : "無特定器械。";
+  // 1. 檢查 LocalStorage 快取
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) return cached;
 
-  const systemInstruction = `
-    你現在是「David 教練」，The Matrix 系統的首席戰略官。
-    任務：體態視覺診斷。
-    語氣：冷靜、專業、戰場直覺、台灣健身術語。
-    稱呼：${profile.name}。
-    格式：Markdown 條列式。
+  // 2. Gatekeeper 檢查
+  const access = checkAccess('daily', profile);
+  if (!access.allowed) {
+    // 照理說 UI 會擋，但若繞過 UI，回傳通用語句
+    return "David 教練：今日戰術分析已完成。專注休息，明日再戰。";
+  }
+
+  // 3. 準備精簡數據
+  const logSummary = `${todayLog.startTime}-${todayLog.endTime} Focus:${todayLog.focus}. Ex:${todayLog.exercises.map(e => `${e.name}:${e.weight}kg`).join(',')}. Note:${todayLog.feedback || 'None'}`;
+  
+  const prompt = `
+    學員：${profile.name} (目標:${GoalMetadata[profile.goal].label})
+    今日訓練：${logSummary}
+    任務：給予一段短評 (50字內)，包含肯定與一個具體建議。
   `;
 
-  const prompt = `
-    使用者：${profile.name} (${profile.gender === 'F' ? '女性' : '男性'})
-    目標：${goalStr}
-    裝備：${equipmentStr}
+  try {
+    const ai = getAIInstance();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview", 
+      contents: prompt,
+      config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
+    });
     
-    請分析影像中的：視覺特徵、弱點分析、戰術建議、戰略官叮嚀。
+    const result = response.text.trim();
+    // 寫入快取
+    localStorage.setItem(cacheKey, result);
+    return result;
+
+  } catch (error: any) {
+    if (error.message?.includes('429')) {
+       return "David 教練：系統運算量過載。你的努力我看到了，今天的訓練強度很棒，保持下去。";
+    }
+    return "David 教練：資料鏈路不穩，但你的訓練數據已安全封存。";
+  }
+};
+
+/**
+ * 視覺診斷 (Physique Analysis)
+ * 限制：每日 1 次
+ */
+export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
+  const access = checkAccess('physique', profile);
+  if (!access.allowed) {
+    return "### 🚫 存取限制\n\nDavid 教練：視覺診斷模組每日僅能啟動一次。過度頻繁的檢測無助於成長，請專注於訓練本身。";
+  }
+
+  const meta = GoalMetadata[profile.goal];
+  const goalStr = profile.goal === FitnessGoal.CUSTOM ? profile.customGoalText : meta.label;
+
+  const prompt = `
+    學員：${profile.name} (${profile.gender})
+    目標：${goalStr}
+    任務：分析體態視覺特徵、弱點、戰術建議。Markdown 條列式。
   `;
 
   const imagePart = {
@@ -147,19 +196,18 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview", 
       contents: { parts: [imagePart, { text: prompt }] },
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7,
-      }
+      config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
     });
     return response.text;
-  } catch (error) {
-    return `### ⚠️ 系統連線異常\n\nDavid 教練：無法連接至視覺核心。請檢查 VITE_WORKOUT_GEMINI_API 設定。`;
+  } catch (error: any) {
+    if (error.message?.includes('429')) return "### ⚠️ 系統忙碌\n\nDavid 教練：視覺核心目前滿載。請稍後再試。";
+    return `### ⚠️ 系統連線異常\n\nDavid 教練：無法連接至視覺核心。`;
   }
 };
 
 /**
- * 戰略週報 (使用 AI)
+ * 戰略週報 (Weekly Report)
+ * 限制：每週 2 次，僅傳送本週數據
  */
 export const generateWeeklyReport = async (
   profile: UserProfile, 
@@ -167,23 +215,20 @@ export const generateWeeklyReport = async (
   logs: WorkoutLog[], 
   physiqueRecords: PhysiqueRecord[]
 ) => {
-  const meta = GoalMetadata[profile.goal];
-  const recentMetrics = metrics.slice(-7).map(m => `- ${m.date}: ${m.weight}kg, 體脂${m.bodyFat}%`).join('\n');
-  const recentLogs = logs.slice(-7).map(l => `- ${l.date}: ${l.focus}`).join('\n');
+  const access = checkAccess('weekly', profile);
+  if (!access.allowed) {
+    return "### 🚫 存取限制\n\nDavid 教練：戰略週報每週僅限生成兩次。過度依賴數據分析而忽略執行是兵家大忌。請下週再來。";
+  }
 
-  const systemInstruction = `
-    你現在是「David 教練」。
-    任務：生成健身戰略週報。
-    語氣：專業數據分析、引用科學、台灣用語。
-    稱呼：${profile.name}。
-  `;
+  // 資料修剪：只取最近 7 筆 (假設為一週量) 並精簡格式
+  const prunedMetrics = metrics.slice(-7).map(m => `${m.date}:${m.weight}kg/${m.bodyFat}%`).join('\n');
+  const prunedLogs = pruneLogs(logs.slice(-7)).map(l => `${l.d}[${l.f}]:${l.e}`).join('\n');
 
   const prompt = `
-    目標：${meta.label}
-    近期紀錄：\n${recentMetrics}
-    近期訓練：\n${recentLogs}
-    
-    請生成週報，包含：戰術評估、動作優化、飲食建議、戰略官警語。
+    目標：${GoalMetadata[profile.goal].label}
+    體重體脂：\n${prunedMetrics}
+    本週訓練：\n${prunedLogs}
+    任務：生成週報。包含戰術評估、動作優化、飲食建議。
   `;
 
   try {
@@ -192,7 +237,7 @@ export const generateWeeklyReport = async (
       model: "gemini-3-pro-preview",
       contents: prompt,
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction: SYSTEM_INSTRUCTION,
         tools: [{ googleSearch: {} }],
       },
     });
@@ -200,40 +245,24 @@ export const generateWeeklyReport = async (
     let outputText = response.text;
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     if (sources && sources.length > 0) {
-      outputText += "\n\n---\n**戰略參考來源：**\n";
+      outputText += "\n\n---\n**戰略參考：**\n";
       sources.forEach((chunk: any) => {
-        if (chunk.web?.uri) {
-          outputText += `- [${chunk.web.title || '外部數據節點'}](${chunk.web.uri})\n`;
-        }
+        if (chunk.web?.uri) outputText += `- [${chunk.web.title || 'Source'}](${chunk.web.uri})\n`;
       });
     }
     return outputText;
-  } catch (error) {
-    return `### ⚠️ 週報生成失敗\n\nDavid 教練：系統離線。請檢查 VITE_WORKOUT_GEMINI_API 設定。`;
+  } catch (error: any) {
+    if (error.message?.includes('429')) return "### ⚠️ 流量管制\n\nDavid 教練：戰略指揮部目前通訊繁忙。請稍後再索取報告。";
+    return `### ⚠️ 生成失敗\n\nDavid 教練：系統離線。`;
   }
 };
 
 /**
- * 每日獎勵簡報 (Modal 用)
+ * 每日獎勵簡報 (維持原樣，但因應 Interface 調整)
  */
-export const getDailyBriefing = async (
-  profile: UserProfile,
-  streak: number
-): Promise<string> => {
-  const meta = GoalMetadata[profile.goal];
-  
-  const systemInstruction = `
-    你現在是「David 教練」。
-    任務：每日登入獎勵的恭喜語句。
-    語氣：肯定、榮耀、簡潔。
-    稱呼：${profile.name}。
-  `;
-
-  const prompt = `
-    連續登入第 ${streak} 天。目標：${meta.label}。
-    給一句肯定並鼓勵他領取獎勵的話。
-  `;
-
+export const getDailyBriefing = async (profile: UserProfile, streak: number): Promise<string> => {
+  // 簡單邏輯，不消耗太多 Token，或可考慮改為本地隨機字串以極致省錢
+  const prompt = `連續登入第 ${streak} 天。目標：${GoalMetadata[profile.goal].label}。給一句簡短肯定。`;
   try {
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
@@ -243,6 +272,6 @@ export const getDailyBriefing = async (
     });
     return response.text.trim();
   } catch (error) {
-    return `"${profile.name}，你的堅持是系統最強大的演算法。領取你的獎勵。"`;
+    return `"${profile.name}，你的堅持是系統最強大的演算法。"`;
   }
 };

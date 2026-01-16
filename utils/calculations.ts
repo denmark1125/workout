@@ -6,14 +6,66 @@ export interface MatrixStatus {
   color: string;
 }
 
+/**
+ * 取得當前台灣時間 (GMT+8)
+ * 格式: YYYY-MM-DD HH:mm
+ */
 export const getLocalTimestamp = () => {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  };
+  const formatter = new Intl.DateTimeFormat('zh-TW', options);
+  const parts = formatter.formatToParts(now);
+  
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+  
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`;
+};
+
+/**
+ * 取得當前台灣日期
+ * 格式: YYYY-MM-DD
+ */
+export const getTaiwanDate = (): string => {
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  };
+  // 輸出格式可能因環境而異，統一處理
+  const formatter = new Intl.DateTimeFormat('en-CA', options); // en-CA 輸出 YYYY-MM-DD
+  return formatter.format(now);
+};
+
+/**
+ * 取得當前台灣週次 ID
+ * 格式: YYYY-Www (例如 2025-W08)
+ * 定義: 週一為每週第一天
+ */
+export const getTaiwanWeekId = (): string => {
+  const now = new Date();
+  // 轉換為台灣時間物件
+  const taiwanTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+  
+  const date = new Date(taiwanTime.getTime());
+  date.setHours(0, 0, 0, 0);
+  
+  // 設定為本週四，以計算 ISO 週次
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  const weekNumber = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+  
+  return `${date.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
 };
 
 export const getBMIStatus = (bmi: number): MatrixStatus => {

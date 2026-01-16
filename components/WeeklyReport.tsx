@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { UserProfile, UserMetrics, WorkoutLog, PhysiqueRecord } from '../types';
 import { generateWeeklyReport } from '../services/geminiService';
+import { getTaiwanWeekId } from '../utils/calculations';
 import { FileText, Zap, Shield, TrendingUp, ArrowRight, Loader2 } from 'lucide-react';
 
 interface WeeklyReportProps {
@@ -9,11 +10,18 @@ interface WeeklyReportProps {
   metrics: UserMetrics[];
   logs: WorkoutLog[];
   physiqueRecords: PhysiqueRecord[];
+  onProfileUpdate: (p: UserProfile) => void; // Added
 }
 
-const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, physiqueRecords }) => {
+const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, physiqueRecords, onProfileUpdate }) => {
   const [report, setReport] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Gatekeeper UI Check
+  const currentWeek = getTaiwanWeekId();
+  // 檢查是否為新的一週，若是則視為 0 次
+  const currentCount = profile.weeklyReportUsage?.weekId === currentWeek ? profile.weeklyReportUsage.count : 0;
+  const isLimitReached = currentCount >= 2 && profile.role !== 'admin';
 
   const handleGenerate = async () => {
     if (metrics.length === 0 && logs.length === 0) {
@@ -24,6 +32,17 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
     try {
       const result = await generateWeeklyReport(profile, metrics, logs, physiqueRecords);
       setReport(result || "生成失敗，系統無效回饋。");
+      
+      // 更新使用量
+      if (profile.role !== 'admin' && !result.includes('存取限制')) {
+        onProfileUpdate({
+          ...profile,
+          weeklyReportUsage: {
+            weekId: currentWeek,
+            count: currentCount + 1
+          }
+        });
+      }
     } catch (err) {
       setReport("與核心引擎連線異常，請檢查網路狀態。");
     } finally {
@@ -38,13 +57,19 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
           <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Fitness Command Hub</p>
           <h2 className="text-4xl md:text-6xl font-black text-black tracking-tighter uppercase leading-none">健身戰略週報</h2>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="bg-[#bef264] text-black px-10 py-5 font-black uppercase tracking-[0.4em] text-xs hover:bg-black hover:text-[#bef264] transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1 animate-glow rounded-sm"
-        >
-          {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> ANALYZING...</> : <><Zap className="w-5 h-5 fill-current" /> 生成 AI 週報</>}
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+            WEEKLY LIMIT: {isLimitReached ? 'MAXED' : `${currentCount}/2`}
+          </p>
+          <button
+            onClick={handleGenerate}
+            disabled={loading || isLimitReached}
+            className={`px-10 py-5 font-black uppercase tracking-[0.4em] text-xs transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1 rounded-sm
+              ${loading || isLimitReached ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-[#bef264] text-black hover:bg-black hover:text-[#bef264] animate-glow'}`}
+          >
+            {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> ANALYZING...</> : <><Zap className="w-5 h-5 fill-current" /> 生成 AI 週報</>}
+          </button>
+        </div>
       </header>
 
       {report ? (

@@ -14,7 +14,7 @@ import DailyRewardModal from './components/DailyRewardModal';
 import Onboarding from './components/Onboarding'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
-import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; // Import new function
+import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; 
 import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
 import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
 import { Loader2, AlertTriangle, LogOut, Terminal } from 'lucide-react';
@@ -33,7 +33,6 @@ const App: React.FC = () => {
   const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
   
-  // David Coach Greeting State
   const [davidGreeting, setDavidGreeting] = useState<string>("");
   const [isGreetingLoading, setIsGreetingLoading] = useState(false);
 
@@ -57,7 +56,12 @@ const App: React.FC = () => {
     memberId: '', password: '',
     collectedRewardIds: [],
     unlockedAchievementIds: [],
-    hasCompletedOnboarding: true
+    hasCompletedOnboarding: true,
+    // Init new fields
+    role: 'user',
+    lastDailyFeedbackDate: '',
+    lastPhysiqueAnalysisDate: '',
+    weeklyReportUsage: { weekId: '', count: 0 }
   });
 
   const [metrics, setMetrics] = useState<UserMetrics[]>([]);
@@ -70,7 +74,7 @@ const App: React.FC = () => {
 
     const resetTimer = () => {
       clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => handleLogout(true), 3 * 60 * 60 * 1000); // 3 小時自動登出
+      timeoutRef.current = setTimeout(() => handleLogout(true), 3 * 60 * 60 * 1000); // 3 小時
       
       const warning1 = setTimeout(() => setShowTimeoutWarning("1.5小時"), 1.5 * 60 * 60 * 1000);
       const warning2 = setTimeout(() => setShowTimeoutWarning("2小時"), 2 * 60 * 60 * 1000);
@@ -94,23 +98,21 @@ const App: React.FC = () => {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    setIsAdmin(currentMemberId === 'admin_roots');
+    // 雙重確認：ID 判定與 Role 判定
+    setIsAdmin(currentMemberId === 'admin_roots' || profile.role === 'admin');
     const checkDb = () => setDbConnected(db !== null);
     checkDb();
     const interval = setInterval(checkDb, 5000);
     return () => clearInterval(interval);
-  }, [currentMemberId]);
+  }, [currentMemberId, profile.role]);
 
-  // Load Greeting when profile loads
+  // Load Greeting
   useEffect(() => {
     if (isAuthenticated) {
       if (!davidGreeting) setIsGreetingLoading(true);
-      
       getDavidGreeting(profile)
         .then(msg => setDavidGreeting(msg))
-        .catch(() => {
-           setDavidGreeting(`David 教練：${profile.name}，系統已就緒。隨時準備開始訓練。`);
-        })
+        .catch(() => setDavidGreeting(`David 教練：${profile.name}，系統已就緒。`))
         .finally(() => setIsGreetingLoading(false));
     }
   }, [isAuthenticated, profile.name]);
@@ -132,6 +134,10 @@ const App: React.FC = () => {
           const todayStr = today.toLocaleDateString('en-CA');
           let updatedProfile = { ...p };
           
+          // 確保新欄位存在
+          if (!updatedProfile.role) updatedProfile.role = 'user';
+          if (currentMemberId === 'admin_roots') updatedProfile.role = 'admin';
+          
           if (updatedProfile.hasCompletedOnboarding === false) {
             setShowOnboarding(true);
           }
@@ -140,7 +146,7 @@ const App: React.FC = () => {
           const diffDays = (today.getTime() - lastLogin.getTime()) / (1000 * 3600 * 24);
           
           if (diffDays >= 90) {
-            if(confirm("David 教練：偵測到您已超過90天未同步數據。需要重新啟動戰術教學，複習系統操作嗎？")) {
+            if(confirm("David 教練：偵測到您已超過90天未同步數據。需要重新啟動戰術教學嗎？")) {
                setShowOnboarding(true);
             }
           }
@@ -153,12 +159,8 @@ const App: React.FC = () => {
 
              setIsBriefingLoading(true);
              getDailyBriefing(updatedProfile, updatedProfile.loginStreak || 1)
-               .then(briefing => {
-                 setDailyBriefing(briefing);
-               })
-               .finally(() => {
-                 setIsBriefingLoading(false);
-               });
+               .then(briefing => setDailyBriefing(briefing))
+               .finally(() => setIsBriefingLoading(false));
           }
 
           if (updatedProfile.lastLoginDate !== todayStr) {
@@ -236,7 +238,11 @@ const App: React.FC = () => {
   const handleRegister = async (newProfile: UserProfile, initialWeight: number) => {
     setIsSyncing(true);
     try {
-      const profileToSave = { ...newProfile, hasCompletedOnboarding: false };
+      const profileToSave: UserProfile = { 
+        ...newProfile, 
+        hasCompletedOnboarding: false,
+        role: (newProfile.memberId === 'admin_roots' ? 'admin' : 'user') as 'admin' | 'user'
+      };
       const initialMetric: UserMetrics = {
         id: Date.now().toString(),
         date: getLocalTimestamp(),
@@ -273,11 +279,11 @@ const App: React.FC = () => {
     setCurrentMemberId(null);
     setIsAuthenticated(false);
     setActiveTab('dashboard');
-    if (isAuto) alert("系統偵測到您已閒置超過3小時，為安全起見已自動登出。");
+    if (isAuto) alert("系統偵測到您已閒置超過3小時，已自動登出。");
   };
 
   const handleDeletePhysiqueRecord = (id: string) => {
-    if (confirm("David 教練：確定要銷毀這份視覺診斷紀錄嗎？此操作無法復原。")) {
+    if (confirm("David 教練：確定要銷毀這份視覺診斷紀錄嗎？")) {
       setPhysiqueRecords(prev => prev.filter(r => r.id !== id));
     }
   };
@@ -302,7 +308,6 @@ const App: React.FC = () => {
       />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
         
-        {/* David Coach Permanent Header Banner */}
         <div className="bg-black text-[#bef264] px-4 md:px-8 py-3 flex items-start gap-4 shadow-md z-20 sticky top-0 shrink-0">
            <div className="mt-0.5 animate-pulse">
               <Terminal size={16} className="fill-current" />
@@ -323,16 +328,17 @@ const App: React.FC = () => {
 
         <div className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 animate-in fade-in duration-500">
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
-          {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} />}
+          {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} profile={profile} onProfileUpdate={setProfile} />}
           {activeTab === 'scan' && (
             <PhysiqueScanner 
               profile={profile} 
               records={physiqueRecords} 
               onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])}
               onDeleteRecord={handleDeletePhysiqueRecord}
+              onProfileUpdate={setProfile}
             />
           )}
-          {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} />}
+          {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => setShowOnboarding(true)} />}

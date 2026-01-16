@@ -1,19 +1,25 @@
 
 import React, { useState, useMemo } from 'react';
-import { WorkoutLog, WorkoutExercise } from '../types';
-import { ChevronLeft, ChevronRight, Plus, X, Trash2, Clock, MessageSquare, Zap } from 'lucide-react';
+import { WorkoutLog, WorkoutExercise, UserProfile } from '../types';
+import { getDailyFeedback } from '../services/geminiService';
+import { getTaiwanDate } from '../utils/calculations';
+import { ChevronLeft, ChevronRight, Plus, X, Trash2, Clock, MessageSquare, Zap, Loader2 } from 'lucide-react';
 
 interface TrainingJournalProps {
   logs: WorkoutLog[];
   onAddLog: (log: WorkoutLog) => void;
   onDeleteLog: (logId: string) => void;
+  profile: UserProfile; // Added
+  onProfileUpdate: (p: UserProfile) => void; // Added
 }
 
-const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDeleteLog }) => {
+const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDeleteLog, profile, onProfileUpdate }) => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  
   const [showCoachFeedback, setShowCoachFeedback] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   // 登錄模組狀態
   const [startTime, setStartTime] = useState("18:00");
@@ -63,12 +69,13 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
     setSelectedFocus(prev => prev.includes(f) ? prev.filter(i => i !== f) : [...prev, f]);
   };
 
-  const handleCommit = () => {
+  const handleCommit = async () => {
     if (pendingExercises.length === 0) {
       alert("David教練: 至少需新增一個動作項目才能進行數據封存。");
       return;
     }
     
+    setIsAiProcessing(true);
     const logFocus = [...selectedFocus, ...(customFocus ? [customFocus] : [])].join(', ');
     const newLog: WorkoutLog = {
       id: Date.now().toString(),
@@ -82,15 +89,25 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
 
     onAddLog(newLog);
 
-    const coachQuotes = [
-      "David教練: 執行力優異。肌肉壓力數據已封存。",
-      "David教練: 意志力水平確認。今日訓練質量：卓越。",
-      "David教練: 紀錄已同步至雲端。繼續保持極限狀態。",
-      "David教練: 看到你的進步了，雖然數據只是冷冰冰的數字，但你的汗水不是。"
-    ];
-    setFeedbackMsg(coachQuotes[Math.floor(Math.random() * coachQuotes.length)]);
+    // 觸發 AI 反饋 (Gatekeeper 邏輯在 service 內，但需確保只在當日觸發)
+    const today = getTaiwanDate();
+    let aiResponse = "";
+    
+    if (selectedDate === today) {
+       aiResponse = await getDailyFeedback(profile, newLog);
+       // 更新 Profile 的 lastDailyFeedbackDate 以避免重複呼叫
+       // 注意：Service 不會自動更新 DB，需手動更新 State
+       if (profile.lastDailyFeedbackDate !== today) {
+         onProfileUpdate({ ...profile, lastDailyFeedbackDate: today });
+       }
+    } else {
+       aiResponse = "David教練: 歷史紀錄已補登。數據完整性校準完成。";
+    }
+
+    setFeedbackMsg(aiResponse);
     setShowCoachFeedback(true);
-    setTimeout(() => setShowCoachFeedback(false), 3000);
+    setIsAiProcessing(false);
+    setTimeout(() => setShowCoachFeedback(false), 5000); // 延長顯示時間讓用戶閱讀
 
     setPendingExercises([]);
     setFeedback('');
@@ -232,9 +249,10 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
               />
               <button 
                 onClick={handleCommit} 
-                className="w-full bg-black text-white py-6 font-black text-sm tracking-[0.5em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-2xl active:scale-95"
+                disabled={isAiProcessing}
+                className="w-full bg-black text-white py-6 font-black text-sm tracking-[0.5em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-2xl active:scale-95 disabled:bg-gray-200 disabled:text-gray-400"
               >
-                封存訓練日誌 COMMIT
+                {isAiProcessing ? 'UPLINKING...' : '封存訓練日誌 COMMIT'}
               </button>
             </div>
           </div>
@@ -246,9 +264,9 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onDel
            <div className="bg-black text-[#bef264] p-8 border-4 border-[#bef264] shadow-[0_0_80px_rgba(190,242,100,0.4)] animate-in zoom-in duration-300 max-w-lg">
               <div className="flex items-center gap-4 mb-4">
                  <Zap size={28} className="fill-current animate-pulse" />
-                 <p className="text-[12px] font-black uppercase tracking-[0.4em]">System Uplink Success</p>
+                 <p className="text-[12px] font-black uppercase tracking-[0.4em]">Tactical Feedback</p>
               </div>
-              <p className="text-2xl md:text-3xl font-black italic tracking-tighter leading-tight text-white">{feedbackMsg}</p>
+              <p className="text-lg md:text-xl font-bold italic tracking-tight leading-snug text-white whitespace-pre-wrap">{feedbackMsg}</p>
            </div>
         </div>
       )}

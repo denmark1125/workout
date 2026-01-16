@@ -13,7 +13,7 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboarding }) => {
   const [showSaved, setShowSaved] = useState(false);
   const [newEqInput, setNewEqInput] = useState('');
-  const [testStatus, setTestStatus] = useState<'IDLE' | 'TESTING' | 'SUCCESS' | 'FAIL'>('IDLE');
+  const [testStatus, setTestStatus] = useState<'IDLE' | 'TESTING' | 'SUCCESS' | 'FAIL' | 'DENIED'>('IDLE');
 
   const baseEquipment = [
     '啞鈴', '槓鈴', '纜繩機', '深蹲架', '史密斯機', 
@@ -76,8 +76,14 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
   };
 
   const handleTestConnection = async () => {
+    if (profile.role !== 'admin') {
+      setTestStatus('DENIED');
+      setTimeout(() => setTestStatus('IDLE'), 3000);
+      return;
+    }
+
     setTestStatus('TESTING');
-    const result = await testConnection();
+    const result = await testConnection(profile.role);
     setTestStatus(result ? 'SUCCESS' : 'FAIL');
     setTimeout(() => setTestStatus('IDLE'), 3000);
   };
@@ -238,19 +244,20 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
             <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest mb-4">系統診斷 (DIAGNOSTICS)</h3>
             <button
               onClick={handleTestConnection}
-              disabled={testStatus === 'TESTING'}
+              disabled={testStatus === 'TESTING' || testStatus === 'DENIED'}
               className={`w-full border px-6 py-4 font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-4 shadow-sm
                 ${testStatus === 'SUCCESS' ? 'bg-[#bef264] border-[#bef264] text-black' : 
-                  testStatus === 'FAIL' ? 'bg-red-500 border-red-500 text-white' : 
+                  testStatus === 'FAIL' || testStatus === 'DENIED' ? 'bg-red-500 border-red-500 text-white' : 
                   'bg-black text-white border-black hover:bg-gray-800'}`}
             >
                {testStatus === 'TESTING' ? <Loader2 className="animate-spin" size={14} /> : 
                 testStatus === 'SUCCESS' ? <CheckCircle size={14} /> : 
-                testStatus === 'FAIL' ? <AlertTriangle size={14} /> : 
+                testStatus === 'FAIL' || testStatus === 'DENIED' ? <AlertTriangle size={14} /> : 
                 <Zap size={14} />}
                {testStatus === 'TESTING' ? 'TESTING UPLINK...' : 
                 testStatus === 'SUCCESS' ? 'SYSTEM ONLINE' : 
                 testStatus === 'FAIL' ? 'CONNECTION FAILED' : 
+                testStatus === 'DENIED' ? 'ACCESS DENIED (ADMIN ONLY)' :
                 '測試 AI 核心連線'}
             </button>
           </div>

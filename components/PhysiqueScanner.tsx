@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { UserProfile, PhysiqueRecord } from '../types';
 import { getPhysiqueAnalysis } from '../services/geminiService';
+import { getTaiwanDate } from '../utils/calculations';
 import { Camera, FileText, ChevronRight, X, User, Loader2, Eye, EyeOff, Trash2, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PhysiqueScannerProps {
@@ -9,19 +10,22 @@ interface PhysiqueScannerProps {
   records: PhysiqueRecord[];
   onAddRecord: (record: PhysiqueRecord) => void;
   onDeleteRecord?: (id: string) => void;
+  onProfileUpdate: (p: UserProfile) => void; // Added
 }
 
-const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onAddRecord, onDeleteRecord }) => {
+const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onAddRecord, onDeleteRecord, onProfileUpdate }) => {
   const [image, setImage] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // 記錄展開狀態 (ID)
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
-  // 記錄解鎖模糊狀態 (ID Set) - 即使展開也預設模糊，需二次點擊解鎖
   const [unlockedImages, setUnlockedImages] = useState<Set<string>>(new Set());
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Gatekeeper Check
+  const today = getTaiwanDate();
+  const isLimitReached = profile.lastPhysiqueAnalysisDate === today && profile.role !== 'admin';
 
   const compressImage = (base64Str: string): Promise<string> => {
     return new Promise((resolve) => {
@@ -71,6 +75,10 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         image: image,
         analysis: textResult
       });
+      // 更新狀態以鎖定今日使用
+      if (profile.role !== 'admin' && !textResult.includes('存取限制')) {
+         onProfileUpdate({ ...profile, lastPhysiqueAnalysisDate: today });
+      }
     } catch (err) {
       setAnalysis("連線至 AI 引擎失敗，請檢查網路。");
     } finally {
@@ -112,35 +120,38 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         {/* 上傳區域 */}
         <div className="lg:col-span-5 p-10 space-y-8 flex flex-col items-center bg-gray-50/30">
           <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full aspect-[4/5] bg-white border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-lime-400 transition-all overflow-hidden group relative"
+            onClick={() => !isLimitReached && fileInputRef.current?.click()}
+            className={`w-full aspect-[4/5] bg-white border-2 border-dashed flex flex-col items-center justify-center transition-all overflow-hidden group relative
+              ${isLimitReached ? 'cursor-not-allowed border-gray-300 opacity-50' : 'cursor-pointer border-gray-200 hover:border-lime-400'}`}
           >
             {image ? (
               <img src={image} className="w-full h-full object-cover transition-transform duration-700" alt="Physique" />
             ) : (
               <div className="text-center p-8 space-y-4">
                 <Camera className="w-10 h-10 text-gray-200 mx-auto" />
-                <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">點擊或拖放照片</p>
+                <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">
+                  {isLimitReached ? '今日額度已用盡' : '點擊或拖放照片'}
+                </p>
               </div>
             )}
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" disabled={isLimitReached} />
           </div>
 
           <button
             onClick={handleScan}
-            disabled={!image || loading}
+            disabled={!image || loading || isLimitReached}
             className={`w-full py-6 font-black text-xs tracking-[0.4em] transition-all flex items-center justify-center gap-4 shadow-xl ${
-              !image || loading ? 'bg-gray-100 text-gray-300' : 'bg-black text-white hover:bg-lime-400 hover:text-black uppercase animate-glow'
+              !image || loading || isLimitReached ? 'bg-gray-100 text-gray-300' : 'bg-black text-white hover:bg-lime-400 hover:text-black uppercase animate-glow'
             }`}
           >
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> 分析中...</> : '啟動 AI 體態診斷'}
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> 分析中...</> : isLimitReached ? '明日再戰 (COOLDOWN)' : '啟動 AI 體態診斷'}
           </button>
         </div>
 
         {/* 分析結果 */}
         <div className="lg:col-span-7 p-10 md:p-16 flex flex-col min-h-[500px] border-l border-gray-100">
           <div className="flex items-center gap-4 mb-8">
-            <div className="w-2 h-2 bg-lime-400 rounded-full animate-pulse"></div>
+            <div className={`w-2 h-2 rounded-full ${isLimitReached ? 'bg-red-500' : 'bg-lime-400 animate-pulse'}`}></div>
             <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest">AI 即時反饋頻道</h3>
           </div>
           
@@ -164,8 +175,8 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
           </div>
         </div>
       </div>
-
-      {/* 歷史存檔 - 加密日誌列表樣式 (隱私優化版) */}
+      
+      {/* 歷史存檔列表 (保持原樣) */}
       <div className="space-y-8">
         <div className="flex items-end justify-between border-b border-gray-100 pb-4">
            <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-4">
@@ -188,7 +199,6 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
 
               return (
                 <div key={record.id} className="bg-white border border-gray-100 transition-all hover:border-gray-300">
-                  {/* Log Header (Compact Row) */}
                   <div 
                     onClick={() => toggleExpand(record.id)}
                     className={`flex items-center justify-between p-5 cursor-pointer select-none ${isExpanded ? 'bg-black text-white' : 'hover:bg-gray-50'}`}
@@ -218,11 +228,9 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
                     </div>
                   </div>
 
-                  {/* Expanded Content (Hidden by default for privacy) */}
                   {isExpanded && (
                     <div className="p-8 border-t border-gray-100 bg-[#fcfcfc] animate-in slide-in-from-top-2 duration-300">
                       <div className="flex flex-col md:flex-row gap-8">
-                        {/* Image Section - Blurred by default */}
                         <div className="w-full md:w-64 shrink-0 space-y-3">
                            <div className="aspect-[3/4] bg-black relative overflow-hidden group shadow-inner border border-gray-200">
                               <img 
@@ -230,7 +238,6 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
                                 className={`w-full h-full object-cover transition-all duration-700 ${isUnlocked ? 'blur-0 opacity-100' : 'blur-xl opacity-50'}`} 
                                 alt="Secure Content"
                               />
-                              
                               <button 
                                 onClick={(e) => toggleImageLock(e, record.id)}
                                 className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/10 hover:bg-black/20 transition-all z-10 w-full"
@@ -244,8 +251,6 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
                               </button>
                            </div>
                         </div>
-
-                        {/* Text Analysis */}
                         <div className="flex-1 space-y-4">
                            <h4 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-200 pb-2">Analysis Data</h4>
                            <div className="text-xs font-medium text-gray-600 leading-loose whitespace-pre-wrap font-sans h-64 overflow-y-auto custom-scrollbar pr-2">

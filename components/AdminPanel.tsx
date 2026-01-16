@@ -5,7 +5,7 @@ import { UserProfile, FitnessGoal } from '../types';
 import { 
   Users, Trash2, Search, RefreshCcw, Lock, 
   Edit3, X, Save, UserPlus, ShieldCheck, UserCircle, 
-  Terminal, Activity
+  Terminal, Activity, Key
 } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
@@ -18,6 +18,7 @@ const AdminPanel: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPass, setEditPass] = useState('');
+  const [editRole, setEditRole] = useState<'user' | 'admin'>('user'); // Added role state
 
   const [newMember, setNewMember] = useState({ id: '', name: '', password: '', gender: 'M' as 'M'|'F' });
 
@@ -43,13 +44,24 @@ const AdminPanel: React.FC = () => {
     const profile = await fetchFromCloud('profiles', uid);
     setEditingId(uid);
     setEditName(profile?.name || uid);
-    setEditPass('');
+    setEditPass(''); // Don't show existing password for security, only if changing
+    setEditRole(profile?.role || 'user'); // Load current role
   };
 
   const handleUpdate = async (uid: string) => {
+    if (uid === 'admin_roots' && editRole !== 'admin') {
+      alert("根帳號必須保留管理員權限。");
+      return;
+    }
+
     const profile = await fetchFromCloud('profiles', uid);
-    const updated = { ...profile, name: editName.trim() || uid };
+    const updated = { 
+      ...profile, 
+      name: editName.trim() || uid,
+      role: editRole 
+    };
     if (editPass.trim()) updated.password = editPass.trim();
+    
     await syncToCloud('profiles', updated, uid);
     setEditingId(null);
     loadData();
@@ -64,7 +76,8 @@ const AdminPanel: React.FC = () => {
       gender: newMember.gender,
       age: 25, height: 175,
       goal: FitnessGoal.HYPERTROPHY,
-      equipment: [], loginStreak: 0
+      equipment: [], loginStreak: 0,
+      role: 'user'
     };
     await syncToCloud('profiles', profile, profile.memberId);
     setShowAddModal(false);
@@ -116,8 +129,8 @@ const AdminPanel: React.FC = () => {
             <thead className="bg-[#fcfcfc] text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">
               <tr>
                 <th className="py-6 px-10">身份 IDENTITY</th>
-                <th className="py-6 px-10">角色 ROLE</th>
-                <th className="py-6 px-10">存取控制 ACCESS</th>
+                <th className="py-6 px-10">角色權限 ROLE</th>
+                <th className="py-6 px-10">密碼重置 SECURITY</th>
                 <th className="py-6 px-10 text-right">執行 ACTION</th>
               </tr>
             </thead>
@@ -125,6 +138,10 @@ const AdminPanel: React.FC = () => {
               {filteredUsers.map((u: any) => {
                 const isEditing = editingId === u.memberId;
                 const isRoot = u.memberId === 'admin_roots';
+                // 這裡 u 可能只有部分資料，詳細資料需透過 fetch 取得，
+                // 但列表顯示時我們依賴 u (來自 user_registry) 
+                // 若正在編輯，狀態依賴 editingRole state
+                
                 return (
                   <tr key={u.memberId} className={`transition-all ${isEditing ? 'bg-gray-50' : 'hover:bg-[#fcfcfc]'}`}>
                     <td className="py-8 px-10">
@@ -142,22 +159,37 @@ const AdminPanel: React.FC = () => {
                         </div>
                       </div>
                     </td>
+                    
+                    {/* Role Editing Section */}
                     <td className="py-8 px-10">
-                      <div className={`inline-flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest border ${isRoot ? 'border-black bg-black text-[#bef264]' : 'border-gray-100 bg-white text-gray-400'}`}>
-                        {isRoot ? <Terminal size={10} /> : <UserCircle size={10} />}
-                        {isRoot ? 'System Root' : 'Member'}
-                      </div>
+                      {isEditing && !isRoot ? (
+                        <select 
+                          value={editRole} 
+                          onChange={(e) => setEditRole(e.target.value as 'user' | 'admin')}
+                          className="bg-white border border-gray-300 text-sm font-bold py-2 px-3 outline-none focus:border-black"
+                        >
+                          <option value="user">USER (一般)</option>
+                          <option value="admin">ADMIN (管理)</option>
+                        </select>
+                      ) : (
+                        <div className={`inline-flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest border ${isRoot ? 'border-black bg-black text-[#bef264]' : 'border-gray-100 bg-white text-gray-400'}`}>
+                          {isRoot ? <Terminal size={10} /> : <UserCircle size={10} />}
+                          {isRoot ? 'System Root' : 'Member'}
+                        </div>
+                      )}
                     </td>
+
                     <td className="py-8 px-10">
                       {isEditing ? (
                         <div className="flex items-center gap-3 bg-white border px-4 py-2">
-                          <Lock size={12} className="text-gray-300" />
-                          <input type="text" value={editPass} onChange={e => setEditPass(e.target.value)} className="text-[10px] font-black w-32 outline-none" placeholder="NEW_PASSWORD" />
+                          <Key size={12} className="text-gray-300" />
+                          <input type="text" value={editPass} onChange={e => setEditPass(e.target.value)} className="text-[10px] font-black w-32 outline-none" placeholder="輸入新密碼..." />
                         </div>
                       ) : (
-                        <p className="text-[10px] font-black text-gray-900">{isRoot ? 'FULL_ACCESS' : 'DATA_CONTROL'}</p>
+                        <p className="text-[10px] font-black text-gray-300 flex items-center gap-2"><Lock size={10}/> ENCRYPTED</p>
                       )}
                     </td>
+
                     <td className="py-8 px-10 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {isEditing ? (
