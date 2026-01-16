@@ -4,9 +4,12 @@ import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, Physiq
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  const apiKey = process.env.API_KEY;
+  // 修正：同時支援標準名稱 API_KEY 與用戶截圖中的自訂名稱 workout_gemini_API
+  const apiKey = process.env.workout_gemini_API || process.env.API_KEY;
+  
   if (!apiKey) {
-    throw new Error("API Key not found. Please set API_KEY in Vercel Environment Variables.");
+    console.error("API Key Missing: Checked 'workout_gemini_API' and 'API_KEY'");
+    throw new Error("API Key not found. Please set 'workout_gemini_API' in Vercel Environment Variables.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -151,7 +154,7 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     });
     return response.text;
   } catch (error) {
-    return `### ⚠️ 系統連線異常\n\nDavid 教練：${profile.name}，目前無法連接至視覺核心。請檢查網路或 API Key。`;
+    return `### ⚠️ 系統連線異常\n\nDavid 教練：${profile.name}，目前無法連接至視覺核心。請檢查環境變數 workout_gemini_API 是否設定正確。`;
   }
 };
 
@@ -206,12 +209,12 @@ export const generateWeeklyReport = async (
     }
     return outputText;
   } catch (error) {
-    return `### ⚠️ 週報生成失敗\n\nDavid 教練：系統離線。請專注於訓練數據。`;
+    return `### ⚠️ 週報生成失敗\n\nDavid 教練：系統離線。請檢查環境變數 workout_gemini_API 設定。`;
   }
 };
 
 /**
- * 每日獎勵簡報 (Modal 用 - 為了維持金句多樣性，這裡暫時保留 AI，若需移除可再告知)
+ * 每日獎勵簡報 (Modal 用)
  */
 export const getDailyBriefing = async (
   profile: UserProfile,

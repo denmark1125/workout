@@ -161,31 +161,35 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
       <div className="flex flex-col xl:flex-row gap-8">
         <div className="flex-1 space-y-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-[#fcfcfc] border border-gray-100 p-6 h-[350px]" id="radar-chart">
-               <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-4">RADAR_ANALYSIS</div>
-               <ResponsiveContainer width="100%" height="100%">
-                 <RadarChart data={radarData}>
-                   <PolarGrid stroke="#f1f5f9" />
-                   <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 900 }} />
-                   <Radar name="Physique" dataKey="A" stroke="#000" strokeWidth={2} fill="#bef264" fillOpacity={0.5} />
-                 </RadarChart>
-               </ResponsiveContainer>
+            <div className="bg-[#fcfcfc] border border-gray-100 p-6 h-[350px] flex flex-col" id="radar-chart">
+               <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-4 shrink-0">RADAR_ANALYSIS</div>
+               <div className="flex-1 min-h-0">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <RadarChart data={radarData}>
+                     <PolarGrid stroke="#f1f5f9" />
+                     <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 900 }} />
+                     <Radar name="Physique" dataKey="A" stroke="#000" strokeWidth={2} fill="#bef264" fillOpacity={0.5} />
+                   </RadarChart>
+                 </ResponsiveContainer>
+               </div>
             </div>
-            <div className="bg-[#fcfcfc] border border-gray-100 p-6 h-[350px]">
-               <div className="flex justify-between mb-4">
+            <div className="bg-[#fcfcfc] border border-gray-100 p-6 h-[350px] flex flex-col">
+               <div className="flex justify-between mb-4 shrink-0">
                  <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest">PROGRESS_TREND</div>
                  <TrendingUp size={16} className="text-[#bef264]" />
                </div>
-               <ResponsiveContainer width="100%" height="100%">
-                 <LineChart data={trendData}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                   <XAxis dataKey="shortDate" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                   <YAxis hide />
-                   <Tooltip contentStyle={{ background: '#000', border: 'none', color: '#fff' }} />
-                   <Line type="monotone" dataKey="weight" stroke="#000" strokeWidth={3} dot={{ r: 4 }} />
-                   <Line type="monotone" dataKey="muscleMass" stroke="#bef264" strokeWidth={3} dot={{ r: 4 }} />
-                 </LineChart>
-               </ResponsiveContainer>
+               <div className="flex-1 min-h-0">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <LineChart data={trendData}>
+                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                     <XAxis dataKey="shortDate" tick={{ fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                     <YAxis hide />
+                     <Tooltip contentStyle={{ background: '#000', border: 'none', color: '#fff' }} />
+                     <Line type="monotone" dataKey="weight" stroke="#000" strokeWidth={3} dot={{ r: 4 }} />
+                     <Line type="monotone" dataKey="muscleMass" stroke="#bef264" strokeWidth={3} dot={{ r: 4 }} />
+                   </LineChart>
+                 </ResponsiveContainer>
+               </div>
             </div>
           </div>
 
