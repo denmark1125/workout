@@ -1,43 +1,28 @@
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
 
-// 輔助函數：安全獲取 AI 實例 (Vite/Env 兼容版)
+// 輔助函數：安全獲取 AI 實例 (Simplified Vite Version)
 const getAIInstance = () => {
-  let apiKey = '';
-
-  // 1. 優先嘗試從 Vite 標準環境變數獲取 (import.meta.env)
-  // 這是解決 "API Key Missing" 的關鍵，因為前端瀏覽器環境主要支援此方式
-  try {
-    // 使用 any 轉型避開 TypeScript 對 import.meta 的檢查 (因為可能缺少 vite-env.d.ts)
-    const meta = import.meta as any;
-    if (typeof meta !== 'undefined' && meta.env) {
-      apiKey = meta.env.VITE_WORKOUT_GEMINI_API || 
-               meta.env.VITE_API_KEY || 
-               meta.env.workout_gemini_API || 
-               '';
-    }
-  } catch (e) {
-    console.warn("Vite environment check failed, falling back...");
-  }
-
-  // 2. 備用嘗試從 Node.js 環境變數獲取 (process.env)
-  // 用於兼容部分舊建置工具或測試環境
-  if (!apiKey) {
-    try {
-      // @ts-ignore
-      if (typeof process !== 'undefined' && process.env) {
-        // @ts-ignore
-        apiKey = process.env.VITE_WORKOUT_GEMINI_API || process.env.workout_gemini_API || process.env.API_KEY || '';
-      }
-    } catch (e) {
-      // 忽略 process 未定義的錯誤，避免在瀏覽器中報錯
-    }
-  }
+  // 使用 any 轉型避開 TypeScript 對 import.meta 的檢查 (因為可能缺少 vite-env.d.ts)
+  const meta = import.meta as any;
+  
+  // Vite 在打包時會自動將 import.meta.env.VITE_XXX 替換為實際數值
+  // 這是最直接針對 Vite/Vercel 的讀取方式
+  const apiKey = meta.env?.VITE_WORKOUT_GEMINI_API;
 
   if (!apiKey) {
-    console.error("Critical Error: AI API Key not found. Checked VITE_WORKOUT_GEMINI_API, workout_gemini_API, API_KEY.");
-    throw new Error("API Key Missing. Please set 'VITE_WORKOUT_GEMINI_API' in your environment variables.");
+    // 增加一個明確的錯誤訊息，方便在控制台除錯
+    const errorMsg = "API Key 缺失：請確認 Vercel 後台已設定 'VITE_WORKOUT_GEMINI_API' 並重新部署。";
+    console.error(errorMsg);
+    
+    // 除錯輔助：印出目前能讀取到的環境變數物件 (不含值，確認 key 是否存在)
+    if (meta.env) {
+      console.warn("Available Env Keys:", Object.keys(meta.env));
+    }
+    
+    throw new Error(errorMsg);
   }
+
   return new GoogleGenAI({ apiKey });
 };
 
@@ -45,6 +30,11 @@ const getAIInstance = () => {
  * 測試 AI 連線狀態
  */
 export const testConnection = async (): Promise<boolean> => {
+  // DEBUG: Vercel Environment Variable Diagnostics
+  const meta = import.meta as any;
+  const key = meta.env?.VITE_WORKOUT_GEMINI_API;
+  console.log("[System Diagnostic] Environment Variable Check:", key ? `Active (Length: ${key.length})` : "CRITICAL_FAILURE: Variable Not Found");
+
   try {
     const ai = getAIInstance();
     await ai.models.generateContent({

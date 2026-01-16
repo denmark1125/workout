@@ -1,15 +1,16 @@
-
 import React, { useState, useEffect } from 'react';
 import { RewardItem, RewardIcon } from '../utils/rewardAssets';
-import { Zap, ShieldCheck, Terminal, ArrowRight } from 'lucide-react';
+import { Zap, ShieldCheck, Terminal, ArrowRight, Loader2 } from 'lucide-react';
 
 interface DailyRewardModalProps {
   reward: RewardItem;
   streak: number;
   onClaim: () => void;
+  briefing?: string | null;
+  isLoadingBriefing?: boolean;
 }
 
-const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onClaim }) => {
+const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onClaim, briefing, isLoadingBriefing }) => {
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
@@ -47,9 +48,21 @@ const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onC
               <Terminal size={14} />
               <p className="text-[11px] font-black uppercase tracking-widest">David 教練指令:</p>
            </div>
-           <p className="text-white text-sm font-bold italic leading-relaxed">
-             「偵測到你已連續 {streak} 天維持訓練紀律。這不只是數據的紀錄，更是你意志力的具現化。這是你應得的戰利品，封存它，讓它成為你訓練矩陣的基石。現在，準備開練。」
-           </p>
+           
+           {isLoadingBriefing ? (
+             <div className="flex items-center gap-2 text-gray-500">
+               <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+               <p className="text-sm font-bold italic text-gray-400">正在接收戰略指令...</p>
+             </div>
+           ) : (
+             <p className="text-white text-sm font-bold italic leading-relaxed">
+               {briefing ? (
+                 (briefing.startsWith('「') || briefing.startsWith('"')) ? briefing : `「${briefing}」`
+               ) : (
+                 `「偵測到你已連續 ${streak} 天維持訓練紀律。這不只是數據的紀錄，更是你意志力的具現化。這是你應得的戰利品，封存它，讓它成為你訓練矩陣的基石。現在，準備開練。」`
+               )}
+             </p>
+           )}
         </div>
 
         <button 
