@@ -5,13 +5,9 @@ import { getTaiwanDate, getTaiwanWeekId } from "../utils/calculations";
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;
-  
-  if (!apiKey) {
-    console.error("API Key Missing: 找不到 VITE_WORKOUT_GEMINI_API");
-    throw new Error("請確認 Vercel 後台環境變數名稱是否為 VITE_WORKOUT_GEMINI_API 並重新部署。");
-  }
-  return new GoogleGenAI({ apiKey });
+  // Use process.env.API_KEY exclusively as per the world-class senior frontend engineer guidelines
+  // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 // --- Gatekeeper Logic (資源控管) ---
@@ -85,11 +81,12 @@ export const testConnection = async (role: string = 'user'): Promise<boolean> =>
   
   try {
     const ai = getAIInstance();
-    await ai.models.generateContent({
+    // Using ai.models.generateContent to query GenAI with both the model name and prompt
+    const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview", 
       contents: "Ping",
     });
-    return true;
+    return !!response.text;
   } catch (error) {
     console.error("AI Core Uplink Failed:", error);
     return false;
@@ -101,7 +98,7 @@ export const testConnection = async (role: string = 'user'): Promise<boolean> =>
  */
 export const getDavidGreeting = async (profile: UserProfile): Promise<string> => {
   const hour = new Date().getHours();
-  // 修改：優先使用用戶名稱 (User Name)，不再使用 Member ID
+  // 修改：優先使用用戶名稱 (User Name)
   const nameToUse = (profile.name && profile.name !== 'User') 
     ? profile.name 
     : '執行者';
@@ -131,7 +128,6 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
   // 2. Gatekeeper 檢查
   const access = checkAccess('daily', profile);
   if (!access.allowed) {
-    // 照理說 UI 會擋，但若繞過 UI，回傳通用語句
     return "David 教練：今日戰術分析已完成。專注休息，明日再戰。";
   }
 
@@ -152,7 +148,8 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
       config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
     });
     
-    const result = response.text.trim();
+    // Accessing .text property directly (not a method)
+    const result = response.text?.trim() || "David 教練：今日表現穩健。";
     // 寫入快取
     localStorage.setItem(cacheKey, result);
     return result;
@@ -198,7 +195,8 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
       contents: { parts: [imagePart, { text: prompt }] },
       config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
     });
-    return response.text;
+    // Accessing .text property directly
+    return response.text || "David 教練：目前無法解析該體態數據。";
   } catch (error: any) {
     if (error.message?.includes('429')) return "### ⚠️ 系統忙碌\n\nDavid 教練：視覺核心目前滿載。請稍後再試。";
     return `### ⚠️ 系統連線異常\n\nDavid 教練：無法連接至視覺核心。`;
@@ -242,7 +240,10 @@ export const generateWeeklyReport = async (
       },
     });
 
-    let outputText = response.text;
+    // Accessing .text property directly
+    let outputText = response.text || "David 教練：週報分析中，請稍候。";
+    
+    // Extract website URLs from groundingChunks and list them
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     if (sources && sources.length > 0) {
       outputText += "\n\n---\n**戰略參考：**\n";
@@ -258,10 +259,9 @@ export const generateWeeklyReport = async (
 };
 
 /**
- * 每日獎勵簡報 (維持原樣，但因應 Interface 調整)
+ * 每日獎勵簡報
  */
 export const getDailyBriefing = async (profile: UserProfile, streak: number): Promise<string> => {
-  // 簡單邏輯，不消耗太多 Token，或可考慮改為本地隨機字串以極致省錢
   const prompt = `連續登入第 ${streak} 天。目標：${GoalMetadata[profile.goal].label}。給一句簡短肯定。`;
   try {
     const ai = getAIInstance();
@@ -270,7 +270,8 @@ export const getDailyBriefing = async (profile: UserProfile, streak: number): Pr
       contents: prompt,
       config: { temperature: 0.9 }
     });
-    return response.text.trim();
+    // Accessing .text property directly
+    return response.text?.trim() || `"${profile.name}，你的堅持是系統最強大的演算法。"`;
   } catch (error) {
     return `"${profile.name}，你的堅持是系統最強大的演算法。"`;
   }

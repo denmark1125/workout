@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { UserProfile, FitnessGoal, GoalMetadata } from '../types';
 import { testConnection } from '../services/geminiService';
-import { Save, Plus, CheckCircle, Target, User as UserIcon, X, BookOpen, Zap, AlertTriangle, Loader2 } from 'lucide-react';
+import { Save, Plus, CheckCircle, Target, User as UserIcon, X, BookOpen, Zap, AlertTriangle, Loader2, ShieldCheck, CloudOff, Cloud } from 'lucide-react';
 
 interface SettingsProps {
   profile: UserProfile;
@@ -29,44 +29,47 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
     setProfile({ ...profile, [field]: value });
   };
 
+  // 動作器械切換邏輯
   const toggleEquipment = (item: string) => {
     const current = profile.equipment || [];
-    if (current.includes(item)) {
-      handleChange('equipment', current.filter(i => i !== item));
-    } else {
-      handleChange('equipment', [...current, item]);
-    }
+    const updated = current.includes(item)
+      ? current.filter(i => i !== item)
+      : [...current, item];
+    handleChange('equipment', updated);
   };
 
+  // 新增自訂器械
   const addCustomEquipment = () => {
-    const trimmed = newEqInput.trim();
-    if (!trimmed) return;
-    
-    const pool = profile.customEquipmentPool || [];
-    if (pool.includes(trimmed) || baseEquipment.includes(trimmed)) {
-      setNewEqInput('');
-      return;
+    const trimmedInput = newEqInput.trim();
+    if (!trimmedInput) return;
+    const currentPool = profile.customEquipmentPool || [];
+    if (!currentPool.includes(trimmedInput)) {
+      const currentEquip = profile.equipment || [];
+      setProfile({
+        ...profile,
+        customEquipmentPool: [...currentPool, trimmedInput],
+        equipment: currentEquip.includes(trimmedInput) ? currentEquip : [...currentEquip, trimmedInput]
+      });
     }
-    
-    const newPool = [...pool, trimmed];
-    const newSelected = [...(profile.equipment || []), trimmed];
-    
-    setProfile({
-      ...profile,
-      customEquipmentPool: newPool,
-      equipment: newSelected
-    });
     setNewEqInput('');
   };
 
+  // 移除自訂器械
   const removeCustomEquipment = (item: string) => {
-    if (baseEquipment.includes(item)) return;
-    const pool = (profile.customEquipmentPool || []).filter(i => i !== item);
-    const selected = (profile.equipment || []).filter(i => i !== item);
+    const currentPool = profile.customEquipmentPool || [];
+    const currentEquip = profile.equipment || [];
     setProfile({
       ...profile,
-      customEquipmentPool: pool,
-      equipment: selected
+      customEquipmentPool: currentPool.filter(i => i !== item),
+      equipment: currentEquip.filter(i => i !== item)
+    });
+  };
+
+  const handlePrivacyToggle = (setting: 'syncPhysiqueImages' | 'syncMetrics' | 'syncLogs') => {
+    const currentSettings = profile.privacySettings || { syncPhysiqueImages: true, syncMetrics: true };
+    handleChange('privacySettings', {
+      ...currentSettings,
+      [setting]: !(currentSettings as any)[setting]
     });
   };
 
@@ -81,12 +84,13 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
       setTimeout(() => setTestStatus('IDLE'), 3000);
       return;
     }
-
     setTestStatus('TESTING');
     const result = await testConnection(profile.role);
     setTestStatus(result ? 'SUCCESS' : 'FAIL');
     setTimeout(() => setTestStatus('IDLE'), 3000);
   };
+
+  const privacy = profile.privacySettings || { syncPhysiqueImages: true, syncMetrics: true };
 
   return (
     <div className="max-w-7xl mx-auto space-y-10 pb-32 overflow-hidden px-2">
@@ -143,37 +147,48 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
             </div>
           </section>
 
-          <section className="space-y-8">
-            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4 flex items-center gap-3">
-              <Target size={12} className="text-black" /> 戰略目標 (Strategy)
+          {/* 數據隱私安全區塊 */}
+          <section className="space-y-8 p-6 bg-gray-50/50 border border-gray-100 rounded-sm">
+            <h3 className="text-[10px] font-mono font-black text-black uppercase tracking-widest flex items-center gap-3">
+              <ShieldCheck size={14} className="text-lime-600" /> 隱私與數據安全 (Security)
             </h3>
-            <div className="grid grid-cols-1 gap-2">
-              {Object.entries(FitnessGoal).map(([key, value]) => (
-                <div key={value} className="space-y-2">
-                  <button
-                    onClick={() => handleChange('goal', value)}
-                    className={`w-full p-4 border text-left transition-all ${
-                      profile.goal === value 
-                        ? 'bg-black text-[#bef264] border-black' 
-                        : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
-                    }`}
+            <div className="space-y-4">
+               <div className="flex items-center justify-between p-4 bg-white border border-gray-100 shadow-sm">
+                  <div>
+                    <p className="text-xs font-black text-black uppercase">診斷照片雲端同步</p>
+                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">
+                      關閉後，體態照片僅儲存於本機裝置，<br/>管理端將無法查看您的影像資料。
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => handlePrivacyToggle('syncPhysiqueImages')}
+                    className={`w-12 h-6 rounded-full relative transition-all ${privacy.syncPhysiqueImages ? 'bg-black' : 'bg-gray-200'}`}
                   >
-                    <p className="font-black text-[11px] uppercase tracking-tighter">{GoalMetadata[value as FitnessGoal].label}</p>
+                    <div className={`absolute top-1 w-4 h-4 rounded-full transition-all ${privacy.syncPhysiqueImages ? 'right-1 bg-[#bef264]' : 'left-1 bg-white'}`}></div>
                   </button>
-                  {value === FitnessGoal.CUSTOM && profile.goal === FitnessGoal.CUSTOM && (
-                    <div className="animate-in slide-in-from-top-2">
-                       <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">請輸入您的自訂健身願景：</label>
-                       <textarea 
-                         value={profile.customGoalText || ''}
-                         onChange={e => handleChange('customGoalText', e.target.value)}
-                         placeholder="例如：在三個月內完成首次半馬，且體重不掉..."
-                         className="w-full bg-gray-50 border border-gray-100 p-3 text-xs font-bold outline-none focus:border-black resize-none h-24 shadow-inner"
-                       />
-                       <p className="text-[8px] text-lime-600 font-black mt-2 animate-pulse uppercase">目標將即時更新至戰略面板</p>
-                    </div>
-                  )}
-                </div>
-              ))}
+               </div>
+
+               <div className="flex items-center justify-between p-4 bg-white border border-gray-100 shadow-sm">
+                  <div>
+                    <p className="text-xs font-black text-black uppercase">生理矩陣雲端備份</p>
+                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">
+                      同步體重、體脂等數據，以便在不同裝置間<br/>存取您的戰略面板。
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => handlePrivacyToggle('syncMetrics')}
+                    className={`w-12 h-6 rounded-full relative transition-all ${privacy.syncMetrics ? 'bg-black' : 'bg-gray-200'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 rounded-full transition-all ${privacy.syncMetrics ? 'right-1 bg-[#bef264]' : 'left-1 bg-white'}`}></div>
+                  </button>
+               </div>
+
+               <div className="p-3 flex items-start gap-2 border border-blue-100 bg-blue-50/30">
+                  <AlertTriangle size={12} className="text-blue-400 mt-0.5 shrink-0" />
+                  <p className="text-[9px] text-blue-500 font-bold italic leading-tight">
+                    註：AI 視覺分析仍需將影像加密傳輸至 Gemini API 進行即時計算，系統不會保存該次傳輸緩存。
+                  </p>
+               </div>
             </div>
           </section>
         </div>

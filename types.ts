@@ -1,10 +1,10 @@
 
 export enum FitnessGoal {
-  FAT_LOSS = 'FAT_LOSS',           // 極限減脂 (著重代謝與有氧)
-  TONING = 'TONING',               // 美體塑形 (女性/線條，著重比例)
-  HYPERTROPHY = 'HYPERTROPHY',     // 鋼鐵增肌 (著重力量與體積)
-  STRENGTH = 'STRENGTH',           // 力量突破 (著重爆發力)
-  ENDURANCE = 'ENDURANCE',         // 耐力與心肺 (著重循環與有氧)
+  FAT_LOSS = 'FAT_LOSS',
+  TONING = 'TONING',
+  HYPERTROPHY = 'HYPERTROPHY',
+  STRENGTH = 'STRENGTH',
+  ENDURANCE = 'ENDURANCE',
   CUSTOM = 'CUSTOM'
 }
 
@@ -49,6 +49,7 @@ export interface PhysiqueRecord {
   date: string;
   image: string; 
   analysis: string;
+  isLocalOnly?: boolean; // 標註此紀錄是否僅留存於在地
 }
 
 export interface UserProfile {
@@ -71,12 +72,18 @@ export interface UserProfile {
   trainingPreference?: 'WEIGHTS' | 'CARDIO' | 'BALANCED';
   hasCompletedOnboarding?: boolean;
   
+  // 隱私權設定
+  privacySettings?: {
+    syncPhysiqueImages: boolean; // 是否同步體態照片到雲端
+    syncMetrics: boolean;        // 是否同步生理數值
+  };
+
   // Gatekeeper & Role Fields
   role?: 'admin' | 'user';
-  lastDailyFeedbackDate?: string;     // YYYY-MM-DD
-  lastPhysiqueAnalysisDate?: string;  // YYYY-MM-DD
+  lastDailyFeedbackDate?: string;
+  lastPhysiqueAnalysisDate?: string;
   weeklyReportUsage?: { 
-    weekId: string; // "2026-W03"
+    weekId: string;
     count: number; 
   };
 }
