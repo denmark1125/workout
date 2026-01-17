@@ -1,8 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
-import { UserProfile, FitnessGoal, GoalMetadata } from '../types';
-import { testConnection } from '../services/geminiService';
-import { Save, Plus, CheckCircle, Target, User as UserIcon, X, BookOpen, Zap, AlertTriangle, Loader2, ShieldCheck, CloudOff, Cloud } from 'lucide-react';
+import { UserProfile, FitnessGoal, GoalMetadata, DietaryPreference, ActivityLevel } from '../types';
+import { testConnection, calculateAiNutritionPlan } from '../services/geminiService';
+import { calculateNutritionTargets } from '../utils/calculations';
+import { Save, CheckCircle, Target, User as UserIcon, BookOpen, Zap, Loader2, ShieldCheck, Database, Activity, RefreshCw, X, Plus } from 'lucide-react';
 
 interface SettingsProps {
   profile: UserProfile;
@@ -14,6 +15,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
   const [showSaved, setShowSaved] = useState(false);
   const [newEqInput, setNewEqInput] = useState('');
   const [testStatus, setTestStatus] = useState<'IDLE' | 'TESTING' | 'SUCCESS' | 'FAIL' | 'DENIED'>('IDLE');
+  const [isCalibrating, setIsCalibrating] = useState(false);
 
   const baseEquipment = [
     '啞鈴', '槓鈴', '纜繩機', '深蹲架', '史密斯機', 
@@ -29,7 +31,16 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
     setProfile({ ...profile, [field]: value });
   };
 
-  // 動作器械切換邏輯
+  const handleDeepChange = (parent: keyof UserProfile, child: string, value: any) => {
+     setProfile({
+        ...profile,
+        [parent]: {
+           ...(profile[parent] as any),
+           [child]: value
+        }
+     });
+  };
+
   const toggleEquipment = (item: string) => {
     const current = profile.equipment || [];
     const updated = current.includes(item)
@@ -38,7 +49,6 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
     handleChange('equipment', updated);
   };
 
-  // 新增自訂器械
   const addCustomEquipment = () => {
     const trimmedInput = newEqInput.trim();
     if (!trimmedInput) return;
@@ -54,7 +64,6 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
     setNewEqInput('');
   };
 
-  // 移除自訂器械
   const removeCustomEquipment = (item: string) => {
     const currentPool = profile.customEquipmentPool || [];
     const currentEquip = profile.equipment || [];
@@ -65,7 +74,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
     });
   };
 
-  const handlePrivacyToggle = (setting: 'syncPhysiqueImages' | 'syncMetrics' | 'syncLogs') => {
+  const handlePrivacyToggle = (setting: 'syncPhysiqueImages' | 'syncMetrics') => {
     const currentSettings = profile.privacySettings || { syncPhysiqueImages: true, syncMetrics: true };
     handleChange('privacySettings', {
       ...currentSettings,
@@ -76,6 +85,55 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
   const handleSave = () => {
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
+  };
+
+  const handleAICalibrate = async () => {
+     if(!confirm("David 教練：系統將根據您的「活動量」、「飲食偏好」與「目標」重新計算營養策略。確定執行？")) return;
+     
+     setIsCalibrating(true);
+     try {
+       // 優先使用 AI 計算
+       const aiResult = await calculateAiNutritionPlan(
+         75, // 若有實際體重應從 metrics 獲取，此處簡化
+         profile.height,
+         profile.age,
+         profile.gender,
+         profile.activityLevel || ActivityLevel.MODERATE,
+         profile.goal,
+         profile.dietaryPreference || DietaryPreference.OMNIVORE
+       );
+
+       if (aiResult) {
+          setProfile({
+             ...profile,
+             dailyCalorieTarget: aiResult.dailyCalorieTarget,
+             macroTargets: aiResult.macroTargets
+          });
+          alert(`校準完成！\nDavid 教練建議：「${aiResult.advice}」`);
+       } else {
+          // Fallback to local calculation if AI fails
+          const localResult = calculateNutritionTargets(
+             75,
+             profile.height,
+             profile.age,
+             profile.gender,
+             profile.activityLevel || ActivityLevel.MODERATE,
+             profile.goal,
+             profile.dietaryPreference || DietaryPreference.OMNIVORE
+          );
+          setProfile({
+             ...profile,
+             dailyCalorieTarget: localResult.dailyCalorieTarget,
+             macroTargets: localResult.macroTargets
+          });
+          alert("AI 連線不穩，已切換至本地演算法完成基礎校準。");
+       }
+     } catch(e) {
+       console.error(e);
+       alert("校準系統異常。");
+     } finally {
+       setIsCalibrating(false);
+     }
   };
 
   const handleTestConnection = async () => {
@@ -92,8 +150,25 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
 
   const privacy = profile.privacySettings || { syncPhysiqueImages: true, syncMetrics: true };
 
+  const dietOptions = [
+    { val: DietaryPreference.OMNIVORE, label: '均衡飲食 (雜食)' },
+    { val: DietaryPreference.CARNIVORE, label: '肉食主義' },
+    { val: DietaryPreference.VEGETARIAN, label: '蛋奶素' },
+    { val: DietaryPreference.VEGAN, label: '全素食' },
+    { val: DietaryPreference.PESCATARIAN, label: '海鮮素' },
+    { val: DietaryPreference.KETOGENIC, label: '生酮飲食' },
+  ];
+
+  const activityOptions = [
+    { val: ActivityLevel.SEDENTARY, label: '久坐少動 (幾乎不運動)' },
+    { val: ActivityLevel.LIGHT, label: '輕度活動 (每週 1-3 天)' },
+    { val: ActivityLevel.MODERATE, label: '中度活動 (每週 3-5 天)' },
+    { val: ActivityLevel.ACTIVE, label: '高度活動 (每週 6-7 天)' },
+    { val: ActivityLevel.ATHLETE, label: '極限運動 (每日高強度)' },
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto space-y-10 pb-32 overflow-hidden px-2">
+    <div className="max-w-7xl mx-auto space-y-10 pb-32 overflow-hidden px-2 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-gray-100 pb-8 gap-6">
         <div>
           <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Protocol Calibration</p>
@@ -108,13 +183,15 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 bg-white border border-gray-100 rounded-sm overflow-hidden shadow-2xl">
-        <div className="lg:col-span-5 p-8 md:p-10 space-y-10 border-b lg:border-b-0 lg:border-r border-gray-100">
+        {/* 左側欄：身份與隱私 */}
+        <div className="lg:col-span-5 p-8 md:p-10 space-y-12 border-b lg:border-b-0 lg:border-r border-gray-100">
           
-          <section className="space-y-8">
+          {/* 基本資料 */}
+          <section className="space-y-6">
             <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4 flex items-center gap-3">
               <UserIcon size={12} className="text-black" /> 巨巨身分 (Identity)
             </h3>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-gray-400">用戶暱稱</label>
                 <input
@@ -147,134 +224,229 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
             </div>
           </section>
 
-          {/* 數據隱私安全區塊 */}
-          <section className="space-y-8 p-6 bg-gray-50/50 border border-gray-100 rounded-sm">
+          {/* 戰略目標設定 */}
+          <section className="space-y-6">
+             <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4 flex items-center gap-3">
+                <Target size={12} className="text-black" /> 戰略目標 (Protocol)
+             </h3>
+             <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                   {Object.entries(GoalMetadata).map(([key, meta]) => (
+                      <button
+                        key={key}
+                        onClick={() => handleChange('goal', key)}
+                        className={`text-left p-3 border text-[10px] font-black uppercase tracking-wide transition-all ${profile.goal === key ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-100 hover:border-black hover:text-black'}`}
+                      >
+                         {meta.label}
+                      </button>
+                   ))}
+                </div>
+                {profile.goal === 'CUSTOM' && (
+                   <div>
+                     <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-gray-400">自定義目標描述</label>
+                     <input
+                        type="text"
+                        value={profile.customGoalText || ''}
+                        onChange={e => handleChange('customGoalText', e.target.value)}
+                        placeholder="例如: 婚前減重、馬拉松備賽..."
+                        className="w-full bg-gray-50 border-b-2 border-gray-100 px-4 py-3 text-sm font-bold focus:border-black outline-none transition-all"
+                     />
+                   </div>
+                )}
+             </div>
+          </section>
+
+          {/* 隱私設定 */}
+          <section className="space-y-6 p-6 bg-gray-50/50 border border-gray-100 rounded-sm">
             <h3 className="text-[10px] font-mono font-black text-black uppercase tracking-widest flex items-center gap-3">
               <ShieldCheck size={14} className="text-lime-600" /> 隱私與數據安全 (Security)
             </h3>
             <div className="space-y-4">
-               <div className="flex items-center justify-between p-4 bg-white border border-gray-100 shadow-sm">
+               <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-black text-black uppercase">診斷照片雲端同步</p>
-                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">
-                      關閉後，體態照片僅儲存於本機裝置，<br/>管理端將無法查看您的影像資料。
-                    </p>
+                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">管理端可見</p>
                   </div>
                   <button 
                     onClick={() => handlePrivacyToggle('syncPhysiqueImages')}
-                    className={`w-12 h-6 rounded-full relative transition-all ${privacy.syncPhysiqueImages ? 'bg-black' : 'bg-gray-200'}`}
+                    className={`w-10 h-5 rounded-full relative transition-all ${privacy.syncPhysiqueImages ? 'bg-black' : 'bg-gray-200'}`}
                   >
-                    <div className={`absolute top-1 w-4 h-4 rounded-full transition-all ${privacy.syncPhysiqueImages ? 'right-1 bg-[#bef264]' : 'left-1 bg-white'}`}></div>
+                    <div className={`absolute top-1 w-3 h-3 rounded-full transition-all ${privacy.syncPhysiqueImages ? 'right-1 bg-[#bef264]' : 'left-1 bg-white'}`}></div>
                   </button>
                </div>
 
-               <div className="flex items-center justify-between p-4 bg-white border border-gray-100 shadow-sm">
+               <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-black text-black uppercase">生理矩陣雲端備份</p>
-                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">
-                      同步體重、體脂等數據，以便在不同裝置間<br/>存取您的戰略面板。
-                    </p>
+                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">跨裝置存取</p>
                   </div>
                   <button 
                     onClick={() => handlePrivacyToggle('syncMetrics')}
-                    className={`w-12 h-6 rounded-full relative transition-all ${privacy.syncMetrics ? 'bg-black' : 'bg-gray-200'}`}
+                    className={`w-10 h-5 rounded-full relative transition-all ${privacy.syncMetrics ? 'bg-black' : 'bg-gray-200'}`}
                   >
-                    <div className={`absolute top-1 w-4 h-4 rounded-full transition-all ${privacy.syncMetrics ? 'right-1 bg-[#bef264]' : 'left-1 bg-white'}`}></div>
+                    <div className={`absolute top-1 w-3 h-3 rounded-full transition-all ${privacy.syncMetrics ? 'right-1 bg-[#bef264]' : 'left-1 bg-white'}`}></div>
                   </button>
-               </div>
-
-               <div className="p-3 flex items-start gap-2 border border-blue-100 bg-blue-50/30">
-                  <AlertTriangle size={12} className="text-blue-400 mt-0.5 shrink-0" />
-                  <p className="text-[9px] text-blue-500 font-bold italic leading-tight">
-                    註：AI 視覺分析仍需將影像加密傳輸至 Gemini API 進行即時計算，系統不會保存該次傳輸緩存。
-                  </p>
                </div>
             </div>
           </section>
         </div>
 
-        <div className="lg:col-span-7 p-8 md:p-10 space-y-10 relative bg-[#fcfcfc]">
-          <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-4">器械倉庫 (Inventory)</h3>
+        {/* 右側欄：營養與參數 */}
+        <div className="lg:col-span-7 p-8 md:p-10 space-y-12 relative bg-[#fcfcfc]">
           
-          <div className="space-y-10">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {allAvailableEquipment.map(item => {
-                const isCustom = (profile.customEquipmentPool || []).includes(item);
-                return (
-                  <div key={item} className="relative group">
-                    <button
-                      onClick={() => toggleEquipment(item)}
-                      className={`w-full px-3 py-4 text-left text-[11px] font-black uppercase tracking-tight border transition-all ${
-                        (profile.equipment || []).includes(item)
-                          ? 'bg-[#bef264] border-[#bef264] text-black shadow-sm'
-                          : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
-                      }`}
-                    >
-                      {item}
-                    </button>
-                    {isCustom && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); removeCustomEquipment(item); }}
-                        className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X size={10} />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+          {/* 參數與營養配置 */}
+          <section className="space-y-8">
+             <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest flex items-center gap-3">
+                   <Activity size={12} className="text-black" /> 參數與營養配置 (Parameters)
+                </h3>
+                <button 
+                   onClick={handleAICalibrate} 
+                   disabled={isCalibrating}
+                   className="flex items-center gap-2 text-[9px] font-black uppercase bg-black text-[#bef264] px-3 py-1.5 hover:bg-lime-400 hover:text-black transition-all disabled:opacity-50"
+                >
+                   {isCalibrating ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                   {isCalibrating ? 'AI CALCULATING...' : 'AI 戰略校準'}
+                </button>
+             </div>
 
-            <div className="pt-10 border-t border-gray-100">
-              <label className="block text-[10px] font-black uppercase tracking-widest mb-3 text-gray-400">自訂資源 (Expansion)</label>
-              <form onSubmit={(e) => {e.preventDefault(); addCustomEquipment();}} className="flex gap-2">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* 關鍵參數設定 (修復部分) */}
+                <div className="space-y-6">
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">日常活動量 (ACTIVITY LEVEL)</label>
+                      <select 
+                        value={profile.activityLevel || ActivityLevel.MODERATE}
+                        onChange={(e) => handleChange('activityLevel', Number(e.target.value))}
+                        className="w-full bg-white border border-gray-200 p-3 text-xs font-black outline-none focus:border-black"
+                      >
+                         {activityOptions.map(opt => <option key={opt.val} value={opt.val}>{opt.label}</option>)}
+                      </select>
+                   </div>
+                   
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">飲食偏好 (DIET TYPE)</label>
+                      <select 
+                        value={profile.dietaryPreference || DietaryPreference.OMNIVORE}
+                        onChange={(e) => handleChange('dietaryPreference', e.target.value)}
+                        className="w-full bg-white border border-gray-200 p-3 text-xs font-black outline-none focus:border-black"
+                      >
+                         {dietOptions.map(opt => <option key={opt.val} value={opt.val}>{opt.label}</option>)}
+                      </select>
+                   </div>
+
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">每日熱量目標 (TDEE/TARGET)</label>
+                      <input 
+                         type="number"
+                         value={profile.dailyCalorieTarget}
+                         onChange={(e) => handleChange('dailyCalorieTarget', parseInt(e.target.value))}
+                         className="w-full bg-white border-b-2 border-gray-200 px-3 py-2 text-lg font-black font-mono focus:border-black outline-none"
+                      />
+                   </div>
+                </div>
+                
+                {/* 宏量營養素 */}
+                <div className="space-y-4 bg-gray-50 p-6 border border-gray-100">
+                   <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2">宏量營養素戰術 (MACROS)</p>
+                   <div className="space-y-4">
+                      <div className="space-y-1">
+                         <div className="flex justify-between">
+                            <label className="text-[8px] font-black uppercase text-orange-400">蛋白質 Protein</label>
+                            <span className="text-[10px] font-bold">{profile.macroTargets?.protein}g</span>
+                         </div>
+                         <input type="range" min="50" max="300" step="5" value={profile.macroTargets?.protein} onChange={(e) => handleDeepChange('macroTargets', 'protein', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                      </div>
+                      <div className="space-y-1">
+                         <div className="flex justify-between">
+                            <label className="text-[8px] font-black uppercase text-blue-400">碳水 Carbs</label>
+                            <span className="text-[10px] font-bold">{profile.macroTargets?.carbs}g</span>
+                         </div>
+                         <input type="range" min="0" max="500" step="5" value={profile.macroTargets?.carbs} onChange={(e) => handleDeepChange('macroTargets', 'carbs', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                      </div>
+                      <div className="space-y-1">
+                         <div className="flex justify-between">
+                            <label className="text-[8px] font-black uppercase text-yellow-400">脂肪 Fat</label>
+                            <span className="text-[10px] font-bold">{profile.macroTargets?.fat}g</span>
+                         </div>
+                         <input type="range" min="0" max="150" step="5" value={profile.macroTargets?.fat} onChange={(e) => handleDeepChange('macroTargets', 'fat', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                      </div>
+                   </div>
+                </div>
+             </div>
+          </section>
+
+          {/* 器械倉庫 */}
+          <section className="space-y-6 pt-6 border-t border-gray-100">
+             <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-4 flex items-center gap-3">
+                <Database size={12} className="text-black" /> 器械倉庫 (Inventory)
+             </h3>
+             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+               {allAvailableEquipment.map(item => {
+                 const isCustom = (profile.customEquipmentPool || []).includes(item);
+                 return (
+                   <div key={item} className="relative group">
+                     <button
+                       onClick={() => toggleEquipment(item)}
+                       className={`w-full px-3 py-3 text-left text-[10px] font-black uppercase tracking-tight border transition-all ${
+                         (profile.equipment || []).includes(item)
+                           ? 'bg-[#bef264] border-[#bef264] text-black shadow-sm'
+                           : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'
+                       }`}
+                     >
+                       {item}
+                     </button>
+                     {isCustom && (
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); removeCustomEquipment(item); }}
+                         className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                       >
+                         <X size={10} />
+                       </button>
+                     )}
+                   </div>
+                 );
+               })}
+             </div>
+             
+             <div className="mt-4 flex gap-2">
                 <input
                   type="text"
                   value={newEqInput}
                   onChange={e => setNewEqInput(e.target.value)}
                   placeholder="輸入器械名稱..."
-                  className="flex-1 bg-white border border-gray-200 px-4 h-12 text-sm font-bold outline-none focus:border-black"
+                  className="flex-1 bg-white border border-gray-200 px-4 h-10 text-xs font-bold outline-none focus:border-black"
                 />
                 <button 
-                  type="submit"
-                  className="w-12 h-12 bg-black text-[#bef264] flex items-center justify-center hover:bg-lime-400 hover:text-black transition-all"
+                  onClick={addCustomEquipment}
+                  className="w-10 h-10 bg-black text-[#bef264] flex items-center justify-center hover:bg-lime-400 hover:text-black transition-all"
                 >
-                  <Plus size={20} />
+                  <Plus size={16} />
                 </button>
-              </form>
-            </div>
-          </div>
+             </div>
+          </section>
           
-          <div className="pt-10 border-t border-gray-100">
-            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest mb-4">系統教學</h3>
-            <button
-              onClick={onReplayOnboarding}
-              className="w-full bg-white border border-gray-200 text-gray-500 px-6 py-4 font-black uppercase tracking-widest text-[11px] hover:border-black hover:text-black transition-all flex items-center justify-center gap-4 shadow-sm"
-            >
-              <BookOpen size={14} /> 重新啟動新手教學
-            </button>
-          </div>
-
-          <div className="pt-10 border-t border-gray-100">
-            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest mb-4">系統診斷 (DIAGNOSTICS)</h3>
-            <button
-              onClick={handleTestConnection}
-              disabled={testStatus === 'TESTING' || testStatus === 'DENIED'}
-              className={`w-full border px-6 py-4 font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-4 shadow-sm
-                ${testStatus === 'SUCCESS' ? 'bg-[#bef264] border-[#bef264] text-black' : 
-                  testStatus === 'FAIL' || testStatus === 'DENIED' ? 'bg-red-500 border-red-500 text-white' : 
-                  'bg-black text-white border-black hover:bg-gray-800'}`}
-            >
-               {testStatus === 'TESTING' ? <Loader2 className="animate-spin" size={14} /> : 
-                testStatus === 'SUCCESS' ? <CheckCircle size={14} /> : 
-                testStatus === 'FAIL' || testStatus === 'DENIED' ? <AlertTriangle size={14} /> : 
-                <Zap size={14} />}
-               {testStatus === 'TESTING' ? 'TESTING UPLINK...' : 
-                testStatus === 'SUCCESS' ? 'SYSTEM ONLINE' : 
-                testStatus === 'FAIL' ? 'CONNECTION FAILED' : 
-                testStatus === 'DENIED' ? 'ACCESS DENIED (ADMIN ONLY)' :
-                '測試 AI 核心連線'}
-            </button>
+          <div className="pt-10 border-t border-gray-100 space-y-4">
+            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest">System Actions</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={onReplayOnboarding}
+                className="w-full bg-white border border-gray-200 text-gray-500 px-4 py-3 font-black uppercase tracking-widest text-[10px] hover:border-black hover:text-black transition-all flex items-center justify-center gap-2"
+              >
+                <BookOpen size={12} /> 重啟教學
+              </button>
+              <button
+                onClick={handleTestConnection}
+                disabled={testStatus === 'TESTING' || testStatus === 'DENIED'}
+                className={`w-full border px-4 py-3 font-black uppercase tracking-widest text-[10px] transition-all flex items-center justify-center gap-2
+                  ${testStatus === 'SUCCESS' ? 'bg-[#bef264] border-[#bef264] text-black' : 
+                    testStatus === 'FAIL' ? 'bg-red-500 border-red-500 text-white' : 
+                    'bg-black text-white border-black hover:bg-gray-800'}`}
+              >
+                 {testStatus === 'TESTING' ? <Loader2 className="animate-spin" size={12} /> : <Zap size={12} />}
+                 {testStatus === 'TESTING' ? 'Testing...' : testStatus === 'SUCCESS' ? 'AI Online' : 'Test AI Uplink'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

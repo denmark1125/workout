@@ -3,15 +3,44 @@ import React, { useState, useRef } from 'react';
 import { UserProfile, PhysiqueRecord } from '../types';
 import { getPhysiqueAnalysis } from '../services/geminiService';
 import { getTaiwanDate } from '../utils/calculations';
-import { Camera, FileText, ChevronRight, X, User, Loader2, Eye, EyeOff, Trash2, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, ArrowRight, Trash2, Lock, Unlock, ChevronDown, ChevronUp, Loader2, Scan } from 'lucide-react';
 
 interface PhysiqueScannerProps {
   profile: UserProfile;
   records: PhysiqueRecord[];
   onAddRecord: (record: PhysiqueRecord) => void;
   onDeleteRecord?: (id: string) => void;
-  onProfileUpdate: (p: UserProfile) => void; // Added
+  onProfileUpdate: (p: UserProfile) => void;
 }
+
+// === Rich Text Parser (Reused/Simplified for Physique) ===
+const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
+  if (!text) return null;
+  const cleanText = text.replace(/\*\*\*/g, '').replace(/```/g, '').replace(/##/g, '');
+  const lines = cleanText.split('\n').filter(line => line.trim() !== '');
+  
+  return (
+    <div className="space-y-4">
+      {lines.map((line, index) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('###') || (trimmed.length < 30 && trimmed.endsWith('：'))) {
+           return <h3 key={index} className="text-lg font-black uppercase tracking-tight text-black mt-6 mb-2 border-b-2 border-[#bef264] pb-1 inline-block">{trimmed.replace(/###/g, '').replace(/\*\*/g, '')}</h3>;
+        }
+        if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
+           return (
+             <div key={index} className="flex gap-3 items-start pl-1">
+                <div className="w-1.5 h-1.5 bg-black mt-2 rounded-full flex-shrink-0"></div>
+                <p className="text-gray-700 font-bold text-sm leading-relaxed">
+                  {trimmed.substring(1).trim().replace(/\*\*/g, '')}
+                </p>
+             </div>
+           );
+        }
+        return <p key={index} className="text-gray-500 text-sm leading-relaxed">{trimmed.replace(/\*\*/g, '')}</p>;
+      })}
+    </div>
+  );
+};
 
 const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onAddRecord, onDeleteRecord, onProfileUpdate }) => {
   const [image, setImage] = useState<string | null>(null);
@@ -108,7 +137,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
   };
 
   return (
-    <div className="space-y-12 max-w-7xl mx-auto pb-40">
+    <div className="space-y-12 max-w-7xl mx-auto pb-40 px-4">
       <header className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-gray-100 pb-8 gap-6">
         <div>
           <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Visual Diagnostic Module</p>
@@ -149,26 +178,18 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         </div>
 
         {/* 分析結果 */}
-        <div className="lg:col-span-7 p-10 md:p-16 flex flex-col min-h-[500px] border-l border-gray-100">
+        <div className="lg:col-span-7 p-10 md:p-16 flex flex-col min-h-[500px] border-l border-gray-100 bg-[#fcfcfc]">
           <div className="flex items-center gap-4 mb-8">
-            <div className={`w-2 h-2 rounded-full ${isLimitReached ? 'bg-red-500' : 'bg-lime-400 animate-pulse'}`}></div>
-            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest">AI 即時反饋頻道</h3>
+            <Scan className={`w-5 h-5 ${isLimitReached ? 'text-red-500' : 'text-black'}`} />
+            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest">AI Visual Analysis Feed</h3>
           </div>
           
           <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar">
             {analysis ? (
-              <div className="report-typography prose max-w-none">
-                 <div className="whitespace-pre-wrap font-sans text-gray-700 leading-relaxed text-sm">
-                    {analysis.split('\n').map((line, i) => {
-                      if (line.startsWith('###')) return <h3 key={i} className="!mt-8 !mb-4 !text-gray-900 border-l-4 border-lime-400 pl-4 font-black">{line.replace('###', '').trim()}</h3>;
-                      if (line.startsWith('-')) return <li key={i} className="ml-4 mb-2 font-medium">{line.replace('-', '').trim()}</li>;
-                      return <p key={i} className="mb-4">{line}</p>;
-                    })}
-                 </div>
-              </div>
+              <RichTextParser text={analysis} />
             ) : (
-              <div className="h-full flex flex-col items-center justify-center py-20 opacity-20 grayscale">
-                <p className="text-5xl font-black uppercase italic tracking-tighter text-black">待命中</p>
+              <div className="h-full flex flex-col items-center justify-center py-20 opacity-10 grayscale">
+                <p className="text-5xl font-black uppercase italic tracking-tighter text-black">NO SIGNAL</p>
                 <p className="text-[9px] font-mono font-bold mt-4 tracking-[0.4em] text-black">AWAITING_VISUAL_FEED</p>
               </div>
             )}
@@ -176,7 +197,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         </div>
       </div>
       
-      {/* 歷史存檔列表 (保持原樣) */}
+      {/* 歷史存檔列表 */}
       <div className="space-y-8">
         <div className="flex items-end justify-between border-b border-gray-100 pb-4">
            <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-4">
@@ -252,9 +273,9 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
                            </div>
                         </div>
                         <div className="flex-1 space-y-4">
-                           <h4 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-200 pb-2">Analysis Data</h4>
-                           <div className="text-xs font-medium text-gray-600 leading-loose whitespace-pre-wrap font-sans h-64 overflow-y-auto custom-scrollbar pr-2">
-                             {record.analysis}
+                           <h4 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-200 pb-2">Archived Analysis Data</h4>
+                           <div className="bg-white p-6 border border-gray-100 h-64 overflow-y-auto custom-scrollbar">
+                             <RichTextParser text={record.analysis} />
                            </div>
                         </div>
                       </div>

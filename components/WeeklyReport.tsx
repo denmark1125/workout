@@ -1,25 +1,82 @@
 
 import React, { useState } from 'react';
-import { UserProfile, UserMetrics, WorkoutLog, PhysiqueRecord } from '../types';
+import { UserProfile, UserMetrics, WorkoutLog, PhysiqueRecord, GoalMetadata } from '../types';
 import { generateWeeklyReport } from '../services/geminiService';
 import { getTaiwanWeekId } from '../utils/calculations';
-import { FileText, Zap, Shield, TrendingUp, ArrowRight, Loader2 } from 'lucide-react';
+import { FileText, Zap, ArrowRight, Loader2, Target, Brain, Activity, User, Calendar } from 'lucide-react';
 
 interface WeeklyReportProps {
   profile: UserProfile;
   metrics: UserMetrics[];
   logs: WorkoutLog[];
   physiqueRecords: PhysiqueRecord[];
-  onProfileUpdate: (p: UserProfile) => void; // Added
+  onProfileUpdate: (p: UserProfile) => void;
 }
+
+// === Rich Text Parser for Beautiful Rendering ===
+const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
+  if (!text) return null;
+
+  // Pre-process: Remove common markdown clutter that AI might output
+  const cleanText = text
+    .replace(/\*\*\*/g, '') // Remove triple asterisks
+    .replace(/```/g, '') // Remove code blocks
+    .replace(/##/g, ''); // Remove header markers (we handle headers by logic)
+
+  const lines = cleanText.split('\n').filter(line => line.trim() !== '');
+  
+  return (
+    <div className="space-y-6">
+      {lines.map((line, index) => {
+        const trimmed = line.trim();
+        
+        // 1. Headers (Often starts with "###" or is short and ends with colon)
+        if (trimmed.startsWith('###') || (trimmed.length < 30 && trimmed.endsWith('：')) || (trimmed.length < 30 && trimmed.endsWith(':'))) {
+           return (
+             <h3 key={index} className="text-xl md:text-2xl font-black uppercase tracking-tighter text-white mt-8 mb-4 border-l-4 border-[#bef264] pl-4">
+               {trimmed.replace(/###/g, '').replace(/\*\*/g, '')}
+             </h3>
+           );
+        }
+
+        // 2. Bullet Points
+        if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
+           // Highlight bold parts within the list item
+           const content = trimmed.substring(1).trim();
+           return (
+             <div key={index} className="flex gap-4 items-start pl-2 group">
+                <ArrowRight className="w-4 h-4 text-[#bef264] mt-1.5 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+                <p className="text-gray-300 font-medium leading-relaxed text-sm md:text-base">
+                  {content.split(/(\*\*.*?\*\*)/).map((part, i) => 
+                    part.startsWith('**') && part.endsWith('**') 
+                      ? <span key={i} className="text-white font-bold mx-1 border-b border-[#bef264]/30">{part.replace(/\*\*/g, '')}</span> 
+                      : part
+                  )}
+                </p>
+             </div>
+           );
+        }
+
+        // 3. Regular Paragraphs
+        return (
+           <p key={index} className="text-gray-400 leading-relaxed text-sm md:text-base pl-6 border-l border-white/10">
+              {trimmed.split(/(\*\*.*?\*\*)/).map((part, i) => 
+                 part.startsWith('**') && part.endsWith('**') 
+                   ? <span key={i} className="text-[#bef264] font-bold mx-1">{part.replace(/\*\*/g, '')}</span> 
+                   : part
+              )}
+           </p>
+        );
+      })}
+    </div>
+  );
+};
 
 const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, physiqueRecords, onProfileUpdate }) => {
   const [report, setReport] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Gatekeeper UI Check
   const currentWeek = getTaiwanWeekId();
-  // 檢查是否為新的一週，若是則視為 0 次
   const currentCount = profile.weeklyReportUsage?.weekId === currentWeek ? profile.weeklyReportUsage.count : 0;
   const isLimitReached = currentCount >= 2 && profile.role !== 'admin';
 
@@ -33,7 +90,6 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
       const result = await generateWeeklyReport(profile, metrics, logs, physiqueRecords);
       setReport(result || "生成失敗，系統無效回饋。");
       
-      // 更新使用量
       if (profile.role !== 'admin' && !result.includes('存取限制')) {
         onProfileUpdate({
           ...profile,
@@ -51,73 +107,130 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 md:space-y-20 pb-40">
-      <header className="flex flex-col md:flex-row items-end justify-between border-b-4 border-black/5 pb-10 gap-6 px-2">
+    <div className="max-w-7xl mx-auto space-y-12 md:space-y-16 pb-40 px-4">
+      
+      {/* Header Section */}
+      <header className="flex flex-col md:flex-row items-end justify-between border-b-4 border-black pb-10 gap-6">
         <div>
-          <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Fitness Command Hub</p>
-          <h2 className="text-4xl md:text-6xl font-black text-black tracking-tighter uppercase leading-none">健身戰略週報</h2>
+          <p className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.4em] mb-2">Tactical Intelligence</p>
+          <h2 className="text-4xl md:text-6xl font-black text-black tracking-tighter uppercase leading-none">戰略週報</h2>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+        <div className="flex flex-col items-end gap-3">
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest bg-gray-100 px-3 py-1 rounded-sm">
             WEEKLY LIMIT: {isLimitReached ? 'MAXED' : `${currentCount}/2`}
           </p>
           <button
             onClick={handleGenerate}
             disabled={loading || isLimitReached}
-            className={`px-10 py-5 font-black uppercase tracking-[0.4em] text-xs transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1 rounded-sm
-              ${loading || isLimitReached ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-[#bef264] text-black hover:bg-black hover:text-[#bef264] animate-glow'}`}
+            className={`px-10 py-5 font-black uppercase tracking-[0.3em] text-xs transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1
+              ${loading || isLimitReached ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-[#bef264] hover:bg-[#bef264] hover:text-black'}`}
           >
-            {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> ANALYZING...</> : <><Zap className="w-5 h-5 fill-current" /> 生成 AI 週報</>}
+            {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> COMPUTING...</> : <><Zap className="w-5 h-5 fill-current" /> 生成戰略報告</>}
           </button>
         </div>
       </header>
 
       {report ? (
-        <div className="bg-[#fcfcfc] border border-gray-100 p-10 md:p-20 relative overflow-hidden shadow-2xl rounded-sm transition-all duration-700 animate-in fade-in slide-in-from-bottom-10">
-          <div className="absolute -top-20 -right-20 opacity-[0.03] pointer-events-none select-none">
-             <span className="text-[25rem] font-black italic leading-none text-black">AI</span>
-          </div>
+        <div className="animate-in fade-in slide-in-from-bottom-10 duration-700">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[800px]">
+            
+            {/* Left Column: Physiological DNA (Profile Card) */}
+            <div className="lg:col-span-4 space-y-6">
+               {/* Identity Card */}
+               <div className="bg-black text-white p-8 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#bef264] blur-[80px] opacity-20 group-hover:opacity-30 transition-opacity rounded-full"></div>
+                  <div className="relative z-10 space-y-6">
+                     <div className="w-16 h-16 bg-[#bef264] text-black flex items-center justify-center font-black text-2xl italic">M</div>
+                     <div>
+                        <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-1">Operative ID</p>
+                        <h3 className="text-3xl font-black uppercase tracking-tighter">{profile.name}</h3>
+                        <p className="text-xs text-gray-500 font-mono mt-1">@{profile.memberId}</p>
+                     </div>
+                     <div className="h-px bg-white/20 w-full"></div>
+                     <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                           <span className="text-[10px] font-black uppercase text-gray-500">Goal</span>
+                           <span className="text-sm font-bold">{GoalMetadata[profile.goal]?.label}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                           <span className="text-[10px] font-black uppercase text-gray-500">Metrics</span>
+                           <span className="text-sm font-bold">{profile.height}cm / {metrics[metrics.length-1]?.weight || '-'}kg</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                           <span className="text-[10px] font-black uppercase text-gray-500">Streak</span>
+                           <span className="text-sm font-bold text-[#bef264]">{profile.loginStreak} Days</span>
+                        </div>
+                     </div>
+                  </div>
+               </div>
 
-          <div className="max-w-3xl relative z-10 space-y-16">
-            <div className="flex items-center gap-4">
-               <div className="w-20 h-1 bg-[#bef264]"></div>
-               <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.4em]">Official Fitness Intelligence Output</h3>
+               {/* Stat Grid */}
+               <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white border border-gray-200 p-6 flex flex-col justify-between h-32 hover:border-black transition-colors">
+                     <Target className="w-6 h-6 text-black mb-2" />
+                     <div>
+                        <p className="text-[9px] font-black uppercase text-gray-400">Target Focus</p>
+                        <p className="text-lg font-black leading-none">{GoalMetadata[profile.goal]?.focus.split('與')[0]}</p>
+                     </div>
+                  </div>
+                  <div className="bg-white border border-gray-200 p-6 flex flex-col justify-between h-32 hover:border-black transition-colors">
+                     <Activity className="w-6 h-6 text-black mb-2" />
+                     <div>
+                        <p className="text-[9px] font-black uppercase text-gray-400">Activity</p>
+                        <p className="text-lg font-black leading-none">Level {profile.activityLevel}</p>
+                     </div>
+                  </div>
+               </div>
             </div>
 
-            <div className="report-typography prose max-w-none text-gray-700">
-              <div className="whitespace-pre-wrap font-sans">
-                {report.split('\n').map((line, i) => {
-                  if (line.startsWith('###')) {
-                    return <h3 key={i} className="tracking-tighter !font-black !text-3xl !text-gray-900 border-none pl-0 !mb-8 !mt-12 first:mt-0">{line.replace('###', '').trim()}</h3>;
-                  }
-                  if (line.startsWith('-')) {
-                    return (
-                      <div key={i} className="flex gap-5 mb-6 items-start pl-2 group">
-                        <ArrowRight className="w-5 h-5 text-[#bef264] mt-1 flex-shrink-0" />
-                        <span className="text-gray-900 font-bold tracking-tight text-base md:text-lg leading-relaxed">{line.replace('-', '').trim()}</span>
-                      </div>
-                    );
-                  }
-                  if (line.trim() === '') return <div key={i} className="h-4" />;
-                  return <p key={i} className="pl-6 border-l-2 border-gray-100 italic font-medium text-gray-500 mb-4">{line}</p>;
-                })}
-              </div>
+            {/* Right Column: Tactical Report (The Main Content) */}
+            <div className="lg:col-span-8 bg-[#111] text-gray-200 p-10 md:p-16 relative overflow-hidden shadow-2xl rounded-sm flex flex-col">
+               {/* Background Deco */}
+               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#bef264] to-transparent"></div>
+               <div className="absolute bottom-0 right-0 w-full h-1 bg-gradient-to-l from-[#bef264] to-transparent"></div>
+               
+               <div className="flex items-center gap-4 mb-12">
+                  <div className="w-3 h-3 bg-[#bef264] animate-pulse"></div>
+                  <h3 className="text-sm font-mono font-black text-[#bef264] uppercase tracking-[0.4em]">Tactical Analysis Report</h3>
+               </div>
+
+               <div className="relative z-10 flex-1">
+                  <RichTextParser text={report} />
+               </div>
+
+               <div className="mt-16 pt-8 border-t border-white/10 flex justify-between items-end">
+                  <div>
+                     <p className="text-[9px] font-black uppercase text-gray-600 tracking-widest">Authorized By</p>
+                     <p className="text-xl font-black text-white uppercase tracking-tighter">David AI Core</p>
+                  </div>
+                  <Brain className="w-10 h-10 text-white/10" />
+               </div>
             </div>
+
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-12 bg-gray-100 gap-px p-px shadow-xl rounded-sm overflow-hidden border border-gray-100">
-           <div className="md:col-span-4 bg-[#fcfcfc] p-16 flex flex-col items-center justify-center text-center space-y-6">
-              <FileText className="w-12 h-12 text-gray-200" />
+        /* Standby State */
+        <div className="grid grid-cols-1 md:grid-cols-12 bg-white gap-px p-px shadow-xl rounded-sm overflow-hidden border border-gray-200 min-h-[400px]">
+           <div className="md:col-span-4 bg-gray-50 p-16 flex flex-col items-center justify-center text-center space-y-6">
+              <FileText className="w-12 h-12 text-gray-300" />
               <div>
-                <p className="text-2xl font-black text-gray-900 tracking-tighter uppercase mb-2">數據待命中</p>
+                <p className="text-2xl font-black text-black tracking-tighter uppercase mb-2">數據待命中</p>
                 <p className="text-[10px] text-gray-400 font-mono font-black uppercase tracking-[0.5em]">SYSTEM STANDBY</p>
               </div>
            </div>
-           <div className="md:col-span-8 bg-[#fcfcfc] p-12 md:p-20 flex flex-col justify-center space-y-10 border-l border-gray-100">
-             <p className="text-2xl md:text-3xl font-medium text-gray-400 tracking-tight leading-relaxed">
-               <span className="text-gray-900 font-black">AI Fitness Hub</span> 正在監測生理矩陣。啟動健身週報生成，我們將整合您的訓練日誌、體標變化與視覺分析報告，提供下週戰術建議。
-             </p>
+           <div className="md:col-span-8 bg-white p-12 md:p-20 flex flex-col justify-center space-y-10 border-l border-gray-100">
+             <div className="space-y-4 max-w-lg">
+                <h3 className="text-3xl font-black uppercase tracking-tighter">Ready for Analysis</h3>
+                <p className="text-gray-500 font-medium leading-relaxed">
+                   AI 健身戰略中樞正在待命。啟動後，系統將整合您的 <span className="text-black font-bold">訓練日誌</span>、<span className="text-black font-bold">生理矩陣</span> 與 <span className="text-black font-bold">視覺診斷</span>，生成一份專屬於您的戰術週報。
+                </p>
+             </div>
+             <div className="flex gap-4">
+                <div className="h-1 w-12 bg-black"></div>
+                <div className="h-1 w-4 bg-gray-200"></div>
+                <div className="h-1 w-4 bg-gray-200"></div>
+             </div>
            </div>
         </div>
       )}

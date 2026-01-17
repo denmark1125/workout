@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord, MacroNutrients, DietaryPreference } from "../types";
+import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, PhysiqueRecord, MacroNutrients, DietaryPreference, ActivityLevel } from "../types";
 import { getTaiwanDate, getTaiwanWeekId } from "../utils/calculations";
 
 // 輔助函數：安全獲取 AI 實例
@@ -61,7 +61,11 @@ const pruneLogs = (logs: WorkoutLog[]) => {
 const SYSTEM_INSTRUCTION = `
 你現在是「David 教練」，The Matrix 系統的首席戰略官。
 語氣：冷靜、專業、戰場直覺、台灣健身術語、激勵人心。
-限制：回答簡潔有力，禁止冗長廢話。
+格式要求：
+1. 嚴格使用繁體中文。
+2. 使用清晰的 Markdown 結構，但**不要**使用程式碼區塊 (Code Block)。
+3. 重點可以使用 **粗體** 標示。
+4. 條列式重點請使用 - 符號。
 `;
 
 // --- Public API Functions ---
@@ -123,7 +127,8 @@ export const analyzeFoodImage = async (base64Image: string): Promise<{ name: str
         "carbs": 碳水化合物克數(整數),
         "fat": 脂肪克數(整數)
       }
-      若無法辨識，回傳 null。不要有任何 Markdown 標記，直接回傳 JSON 字串。
+      若無法辨識，回傳 null。
+      重要：只要回傳 JSON 字串，不要包含 \`\`\`json 或其他標記。
     `;
     
     const imagePart = {
@@ -140,13 +145,69 @@ export const analyzeFoodImage = async (base64Image: string): Promise<{ name: str
     });
 
     const text = response.text?.trim() || "";
-    // 移除可能的 markdown code block
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+       console.error("AI Response invalid format:", text);
+       return null;
+    }
+    
+    return JSON.parse(jsonMatch[0]);
   } catch (error) {
     console.error("Food Analysis Failed", error);
     return null;
   }
+};
+
+/**
+ * AI 營養戰略校準 (Settings Calibration)
+ */
+export const calculateAiNutritionPlan = async (
+   weight: number, height: number, age: number, gender: string,
+   activity: ActivityLevel, goal: string, dietPref: DietaryPreference
+): Promise<{ dailyCalorieTarget: number, macroTargets: { protein: number, carbs: number, fat: number }, advice: string } | null> => {
+   try {
+      const ai = getAIInstance();
+      const prompt = `
+         作為專業運動營養師 David，請為以下學員計算 TDEE 與營養素目標：
+         - 基本資料: ${gender}, ${age}歲, ${height}cm, ${weight}kg
+         - 活動量係數: ${activity} (1.2久坐, 1.375輕度, 1.55中度, 1.725高度, 1.9極限)
+         - 訓練目標: ${goal}
+         - 飲食偏好: ${dietPref}
+
+         請回傳 JSON 格式 (不要 Markdown):
+         {
+            "tdee": 每日目標熱量(整數),
+            "p": 蛋白質克數(整數),
+            "c": 碳水克數(整數),
+            "f": 脂肪克數(整數),
+            "advice": "一句針對此目標與飲食偏好的簡短戰術建議 (繁體中文, 30字內)"
+         }
+      `;
+
+      const response = await ai.models.generateContent({
+         model: "gemini-3-flash-preview",
+         contents: prompt,
+         config: { temperature: 0.2 }
+      });
+
+      const text = response.text?.trim() || "";
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Invalid JSON");
+
+      const data = JSON.parse(jsonMatch[0]);
+      return {
+         dailyCalorieTarget: data.tdee,
+         macroTargets: {
+            protein: data.p,
+            carbs: data.c,
+            fat: data.f
+         },
+         advice: data.advice
+      };
+   } catch (error) {
+      console.error("AI Calibration Failed", error);
+      return null;
+   }
 };
 
 /**
@@ -167,7 +228,7 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
   const logSummary = `${todayLog.startTime}-${todayLog.endTime} Focus:${todayLog.focus}. Ex:${todayLog.exercises.map(e => `${e.name}:${e.weight}kg`).join(',')}. Note:${todayLog.feedback || 'None'}`;
   
   const prompt = `
-    學員：${profile.name} (目標:${GoalMetadata[profile.goal].label})
+    學員：${profile.name} (目標:${GoalMetadata[profile.goal]?.label || profile.goal})
     今日訓練：${logSummary}
     任務：給予一段短評 (50字內)，包含肯定與一個具體建議。
   `;
@@ -202,12 +263,16 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
   }
 
   const meta = GoalMetadata[profile.goal];
-  const goalStr = profile.goal === FitnessGoal.CUSTOM ? profile.customGoalText : meta.label;
+  const goalStr = profile.goal === 'CUSTOM' ? profile.customGoalText : meta?.label;
 
   const prompt = `
     學員：${profile.name} (${profile.gender})
     目標：${goalStr}
-    任務：分析體態視覺特徵、弱點、戰術建議。Markdown 條列式。
+    任務：分析體態視覺特徵、弱點、戰術建議。
+    格式要求：
+    1. 使用 "###" 作為小標題 (如：### 視覺優勢、### 弱點分析)。
+    2. 使用 "-" 作為條列重點。
+    3. 嚴禁使用星號 (***) 或其他 Markdown 符號。
   `;
 
   const imagePart = {
@@ -226,8 +291,8 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     });
     return response.text || "David 教練：目前無法解析該體態數據。";
   } catch (error: any) {
-    if (error.message?.includes('429')) return "### ⚠️ 系統忙碌\n\nDavid 教練：視覺核心目前滿載。請稍後再試。";
-    return `### ⚠️ 系統連線異常\n\nDavid 教練：無法連接至視覺核心。`;
+    if (error.message?.includes('429')) return "### ⚠️ 系統忙碌\nDavid 教練：視覺核心目前滿載。請稍後再試。";
+    return `### ⚠️ 系統連線異常\nDavid 教練：無法連接至視覺核心。`;
   }
 };
 
@@ -248,14 +313,24 @@ export const generateWeeklyReport = async (
   const prunedMetrics = metrics.slice(-7).map(m => `${m.date}:${m.weight}kg/${m.bodyFat}%`).join('\n');
   const prunedLogs = pruneLogs(logs.slice(-7)).map(l => `${l.d}[${l.f}]:${l.e}`).join('\n');
 
-  const dietPrefStr = profile.dietaryPreference ? `飲食偏好：${profile.dietaryPreference}` : '';
+  const dietPrefStr = profile.dietaryPreference ? `飲食偏好：${profile.dietaryPreference}` : '無特殊偏好';
+  const activityStr = profile.activityLevel ? `活動量係數：${profile.activityLevel}` : '中等活動';
 
   const prompt = `
-    目標：${GoalMetadata[profile.goal].label}
-    ${dietPrefStr}
+    目標：${GoalMetadata[profile.goal]?.label || profile.goal}
+    ${dietPrefStr}, ${activityStr}
     體重體脂：\n${prunedMetrics}
     本週訓練：\n${prunedLogs}
-    任務：生成週報。包含戰術評估、動作優化、飲食建議（請根據飲食偏好調整食物建議，例如素食者多推豆類）。
+    
+    任務：生成一份專業的戰略週報。
+    格式要求：
+    1. 分為三個區塊，使用 "###" 開頭：
+       ### 戰術執行評估
+       ### 動作與強度優化
+       ### 營養補給戰略
+    2. 每個區塊下使用 "-" 條列具體建議。
+    3. 針對 ${dietPrefStr} 給予具體食物建議 (例如素食者建議什麼蛋白質)。
+    4. 嚴禁使用星號 (***) 或其他 Markdown 符號。
   `;
 
   try {
@@ -273,15 +348,15 @@ export const generateWeeklyReport = async (
     
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     if (sources && sources.length > 0) {
-      outputText += "\n\n---\n**戰略參考：**\n";
+      outputText += "\n### 戰略參考資料\n";
       sources.forEach((chunk: any) => {
         if (chunk.web?.uri) outputText += `- [${chunk.web.title || 'Source'}](${chunk.web.uri})\n`;
       });
     }
     return outputText;
   } catch (error: any) {
-    if (error.message?.includes('429')) return "### ⚠️ 流量管制\n\nDavid 教練：戰略指揮部目前通訊繁忙。請稍後再索取報告。";
-    return `### ⚠️ 生成失敗\n\nDavid 教練：系統離線。`;
+    if (error.message?.includes('429')) return "### ⚠️ 流量管制\nDavid 教練：戰略指揮部目前通訊繁忙。請稍後再索取報告。";
+    return `### ⚠️ 生成失敗\nDavid 教練：系統離線。`;
   }
 };
 
@@ -289,7 +364,7 @@ export const generateWeeklyReport = async (
  * 每日獎勵簡報
  */
 export const getDailyBriefing = async (profile: UserProfile, streak: number): Promise<string> => {
-  const prompt = `連續登入第 ${streak} 天。目標：${GoalMetadata[profile.goal].label}。給一句簡短肯定。`;
+  const prompt = `連續登入第 ${streak} 天。目標：${GoalMetadata[profile.goal]?.label || profile.goal}。給一句簡短肯定。`;
   try {
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
