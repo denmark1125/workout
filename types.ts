@@ -26,12 +26,12 @@ export enum ActivityLevel {
 }
 
 export const GoalMetadata = {
-  [FitnessGoal.FAT_LOSS]: { label: '極限減脂', focus: '熱量赤字與心肺代謝', persona: '專業鼓勵型' },
-  [FitnessGoal.TONING]: { label: '美體塑形', focus: '身體線條與核心平衡', persona: '細緻導引型' },
-  [FitnessGoal.HYPERTROPHY]: { label: '鋼鐵增肌', focus: '漸進超負荷與肥大', persona: '熱血同理型' },
-  [FitnessGoal.STRENGTH]: { label: '力量突破', focus: '三大項神經肌肉效率', persona: '權威穩重型' },
-  [FitnessGoal.ENDURANCE]: { label: '有氧耐力', focus: '循環訓練與心肺抗壓', persona: '耐力陪伴型' },
-  [FitnessGoal.CUSTOM]: { label: '自訂健身', focus: '用戶自定義目標', persona: '全方位支援型' },
+  [FitnessGoal.FAT_LOSS]: { label: '極限減脂', focus: '熱量赤字與心肺代謝', persona: '專業戰略家' },
+  [FitnessGoal.TONING]: { label: '美體塑形', focus: '身體線條與核心平衡', persona: '精密導引型' },
+  [FitnessGoal.HYPERTROPHY]: { label: '鋼鐵增肌', focus: '漸進超負荷與肥大', persona: '剛毅導師型' },
+  [FitnessGoal.STRENGTH]: { label: '力量突破', focus: '三大項神經肌肉效率', persona: '數據分析師' },
+  [FitnessGoal.ENDURANCE]: { label: '有氧耐力', focus: '循環訓練與心肺抗壓', persona: '耐力策略師' },
+  [FitnessGoal.CUSTOM]: { label: '自訂健身', focus: '用戶自定義目標', persona: '全方位顧問' },
 };
 
 export interface UserMetrics {
@@ -42,23 +42,25 @@ export interface UserMetrics {
   muscleMass: number;
 }
 
-export interface FoodItem {
-  id: string;
-  name: string;
-  unit: string;
-  macros: MacroNutrients;
-  category: string;
-  source?: string;
-  barcode?: string;
-  createdBy?: string; // 用於管理員審核
-  isPending?: boolean;
-}
-
 export interface MacroNutrients {
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number;
+  sodium?: number;
+}
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  unit: string;
+  macros: MacroNutrients;
+  category: 'STAPLE' | 'PROTEIN' | 'VEG' | 'DRINK' | 'SNACK' | 'CONVENIENCE';
+  source?: string;
+  barcode?: string;
+  createdBy?: string;
+  isPending?: boolean;
 }
 
 export interface MealRecord {
@@ -67,6 +69,8 @@ export interface MealRecord {
   image?: string;
   macros: MacroNutrients;
   timestamp: string;
+  servings: number; // 份數
+  portionLabel?: string; // 例如 "1小把", "0.5份"
 }
 
 export interface DietLog {
@@ -77,12 +81,11 @@ export interface DietLog {
     lunch: MealRecord[];
     dinner: MealRecord[];
     snack: MealRecord[];
-    nightSnack: MealRecord[]; // 修正名稱
+    nightSnack: MealRecord[];
   };
   waterIntake: number;
 }
 
-/** Added missing workout related types */
 export type ExerciseType = 'STRENGTH' | 'CARDIO';
 
 export interface WorkoutExercise {
@@ -109,7 +112,6 @@ export interface WorkoutLog {
   totalCaloriesBurned?: number;
 }
 
-/** Added missing physique related types */
 export interface PhysiqueRecord {
   id: string;
   date: string;
@@ -117,7 +119,6 @@ export interface PhysiqueRecord {
   analysis: string;
 }
 
-/** Added missing weekly report related types */
 export interface WeeklyReportData {
   id: string;
   weekId: string;
@@ -155,7 +156,6 @@ export interface UserProfile {
   role?: 'admin' | 'user';
   lastDailyFeedbackDate?: string;
   lastPhysiqueAnalysisDate?: string;
-  /** Added missing tracking fields */
   weeklyReportUsage?: { weekId: string; count: number };
   hasCompletedOnboarding?: boolean;
 }

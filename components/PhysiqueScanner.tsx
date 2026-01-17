@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { UserProfile, PhysiqueRecord } from '../types';
 import { getPhysiqueAnalysis } from '../services/geminiService';
 import { getTaiwanDate } from '../utils/calculations';
-import { Camera, ArrowRight, Trash2, Lock, Unlock, ChevronDown, ChevronUp, Loader2, Scan } from 'lucide-react';
+import { Camera, ArrowRight, Trash2, Lock, Unlock, ChevronDown, ChevronUp, Loader2, Scan, Activity } from 'lucide-react';
 import TacticalLoader from './TacticalLoader';
 
 // === Rich Text Parser ===
@@ -13,29 +13,28 @@ const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
   const lines = cleanText.split('\n').filter(line => line.trim() !== '');
   
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {lines.map((line, index) => {
         const trimmed = line.trim();
         if (trimmed.startsWith('###') || (trimmed.length < 30 && trimmed.endsWith('：'))) {
-           return <h3 key={index} className="text-lg font-black uppercase tracking-tight text-black mt-6 mb-2 border-b-2 border-[#bef264] pb-1 inline-block">{trimmed.replace(/###/g, '').replace(/\*\*/g, '')}</h3>;
+           return <h3 key={index} className="text-xl font-black uppercase tracking-tight text-black mt-10 mb-4 border-b-2 border-[#bef264] pb-2 inline-block">{trimmed.replace(/###/g, '').replace(/\*\*/g, '')}</h3>;
         }
         if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
            return (
-             <div key={index} className="flex gap-3 items-start pl-1">
-                <div className="w-1.5 h-1.5 bg-black mt-2 rounded-full flex-shrink-0"></div>
-                <p className="text-gray-700 font-bold text-sm leading-relaxed">
+             <div key={index} className="flex gap-4 items-start pl-1">
+                <div className="w-2 h-2 bg-black mt-2.5 rounded-full flex-shrink-0"></div>
+                <p className="text-gray-800 font-bold text-base leading-relaxed">
                   {trimmed.substring(1).trim().replace(/\*\*/g, '')}
                 </p>
              </div>
            );
         }
-        return <p key={index} className="text-gray-500 text-sm leading-relaxed">{trimmed.replace(/\*\*/g, '')}</p>;
+        return <p key={index} className="text-gray-600 text-base leading-relaxed mb-4">{trimmed.replace(/\*\*/g, '')}</p>;
       })}
     </div>
   );
 };
 
-// Add missing PhysiqueScannerProps interface
 interface PhysiqueScannerProps {
   profile: UserProfile;
   records: PhysiqueRecord[];
@@ -63,7 +62,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
       img.src = base64Str;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
+        const MAX_WIDTH = 1000; // 稍微提升壓縮解析度
         let width = img.width;
         let height = img.height;
         if (width > MAX_WIDTH) {
@@ -74,7 +73,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
       };
     });
   };
@@ -137,18 +136,18 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
     <div className="space-y-12 max-w-7xl mx-auto pb-40 px-4">
       <header className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-gray-100 pb-8 gap-6">
         <div>
-          <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Visual Diagnostic Module</p>
-          <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none text-black">視覺診斷</h2>
+          <p className="text-sm font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Visual Diagnostic Module</p>
+          <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none text-black">體態診斷</h2>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 bg-white border border-gray-100 shadow-2xl rounded-sm overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-12 bg-white border-2 border-gray-100 shadow-xl rounded-sm overflow-hidden">
         {/* 上傳區域 */}
-        <div className="lg:col-span-5 p-10 space-y-8 flex flex-col items-center bg-gray-50/30">
+        <div className="lg:col-span-5 p-10 space-y-8 flex flex-col items-center bg-gray-50/20 border-r border-gray-100">
           <div 
             onClick={() => !isLimitReached && !loading && fileInputRef.current?.click()}
-            className={`w-full aspect-[4/5] bg-white border-2 border-dashed flex flex-col items-center justify-center transition-all overflow-hidden group relative
-              ${isLimitReached || loading ? 'cursor-not-allowed border-gray-300 opacity-50' : 'cursor-pointer border-gray-200 hover:border-lime-400'}`}
+            className={`w-full aspect-[4/5] bg-white border-2 border-dashed flex flex-col items-center justify-center transition-all overflow-hidden group relative rounded-sm
+              ${isLimitReached || loading ? 'cursor-not-allowed border-gray-200 opacity-50' : 'cursor-pointer border-gray-200 hover:border-lime-400'}`}
           >
             {image ? (
               <div className="relative w-full h-full">
@@ -160,10 +159,10 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
                 )}
               </div>
             ) : (
-              <div className="text-center p-8 space-y-4">
-                <Camera className="w-10 h-10 text-gray-200 mx-auto" />
-                <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">
-                  {isLimitReached ? '今日額度已用盡' : '點擊或拖放照片'}
+              <div className="text-center p-8 space-y-6">
+                <Camera className="w-14 h-14 text-gray-200 mx-auto" />
+                <p className="text-gray-400 font-black uppercase text-sm tracking-widest leading-relaxed">
+                  {isLimitReached ? '今日額度已用盡' : '點擊上傳全身照\nDAVID 將啟動視覺分析'}
                 </p>
               </div>
             )}
@@ -173,135 +172,37 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
           <button
             onClick={handleScan}
             disabled={!image || loading || isLimitReached}
-            className={`w-full py-6 font-black text-xs tracking-[0.5em] transition-all flex items-center justify-center gap-4 shadow-xl uppercase ${
+            className={`w-full py-6 font-black text-sm tracking-[0.5em] transition-all flex items-center justify-center gap-4 shadow-xl uppercase rounded-sm ${
               !image || loading || isLimitReached ? 'bg-gray-100 text-gray-300' : 'bg-black text-white hover:bg-[#bef264] hover:text-black'
             }`}
           >
-            {loading ? <span className="animate-pulse">David 教練診斷中...</span> : isLimitReached ? '明日再戰 (COOLDOWN)' : '啟動 AI 體態診斷'}
+            {loading ? <span className="animate-pulse">DAVID ANALYZING...</span> : isLimitReached ? 'COOLDOWN' : '啟動視覺診斷'}
           </button>
         </div>
 
         {/* 分析結果 */}
-        <div className="lg:col-span-7 p-10 md:p-16 flex flex-col min-h-[500px] border-l border-gray-100 bg-[#fcfcfc]">
-          <div className="flex items-center gap-4 mb-8">
-            <Scan className={`w-5 h-5 ${isLimitReached ? 'text-red-500' : 'text-black'}`} />
-            <h3 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest">AI Visual Analysis Feed</h3>
+        <div className="lg:col-span-7 p-10 md:p-16 flex flex-col min-h-[600px] bg-[#fdfdfd] relative">
+          <div className="flex items-center gap-4 mb-10 pb-4 border-b border-gray-100">
+            <Activity size={24} className="text-lime-500" />
+            <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">David 戰略反饋矩陣</h3>
           </div>
           
-          <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto pr-6 custom-scrollbar">
             {loading ? (
               <div className="h-full flex items-center justify-center">
-                <TacticalLoader type="SCAN" title="David 正透過影像對齊你的肌肉矩陣" />
+                <TacticalLoader type="SCAN" title="正在映射肌肉排列與對稱性" />
               </div>
             ) : analysis ? (
               <RichTextParser text={analysis} />
             ) : (
-              <div className="h-full flex flex-col items-center justify-center py-20 opacity-10 grayscale">
-                <p className="text-5xl font-black uppercase italic tracking-tighter text-black">NO SIGNAL</p>
-                <p className="text-[9px] font-mono font-bold mt-4 tracking-[0.4em] text-black">AWAITING_VISUAL_FEED</p>
+              <div className="h-full flex flex-col items-center justify-center py-20 opacity-10">
+                <Scan size={80} className="text-black mb-6" />
+                <p className="text-3xl font-black uppercase tracking-tighter text-black">Awaiting Visual Input</p>
               </div>
             )}
           </div>
         </div>
       </div>
-      
-      {/* 歷史存檔列表 - 保留原樣 */}
-      <div className="space-y-8">
-        <div className="flex items-end justify-between border-b border-gray-100 pb-4">
-           <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-4">
-             <Lock size={20} className="text-black" />
-             加密診斷存檔 
-             <span className="text-[10px] text-gray-400 font-mono tracking-widest translate-y-1">SECURE_LOGS</span>
-           </h3>
-           <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">TOTAL_RECORDS: {records.length}</p>
-        </div>
-
-        <div className="space-y-2">
-          {records.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 border border-gray-100 border-dashed">
-              <p className="text-gray-400 font-black text-xs uppercase tracking-widest">暫無存檔紀錄</p>
-            </div>
-          ) : (
-            records.map(record => {
-              const isExpanded = expandedRecordId === record.id;
-              const isUnlocked = unlockedImages.has(record.id);
-
-              return (
-                <div key={record.id} className="bg-white border border-gray-100 transition-all hover:border-gray-300">
-                  <div 
-                    onClick={() => toggleExpand(record.id)}
-                    className={`flex items-center justify-between p-5 cursor-pointer select-none ${isExpanded ? 'bg-black text-white' : 'hover:bg-gray-50'}`}
-                  >
-                    <div className="flex items-center gap-6 overflow-hidden">
-                       <div className={`p-2 rounded-sm ${isExpanded ? 'bg-[#bef264] text-black' : 'bg-gray-100 text-gray-400'}`}>
-                         {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                       </div>
-                       <div className="font-mono text-xs font-bold tracking-widest truncate">
-                         <span className={isExpanded ? 'text-gray-400' : 'text-gray-900'}>{record.date}</span>
-                         <span className="mx-3 opacity-30">|</span>
-                         <span className={isExpanded ? 'text-[#bef264]' : 'text-gray-500'}>LOG_ID_{record.id.slice(-6).toUpperCase()}</span>
-                       </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 pl-4 shrink-0">
-                       <div className={`text-[9px] font-black uppercase tracking-widest border px-2 py-1 ${isExpanded ? 'border-gray-700 text-gray-400' : 'border-gray-200 text-gray-300'}`}>
-                          {isExpanded ? 'ACCESSING...' : 'ENCRYPTED'}
-                       </div>
-                       <button 
-                         onClick={(e) => handleDelete(e, record.id)}
-                         className={`p-2 transition-colors ${isExpanded ? 'text-gray-600 hover:text-red-500' : 'text-gray-200 hover:text-red-500'}`}
-                         title="銷毀紀錄"
-                       >
-                         <Trash2 size={16} />
-                       </button>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="p-8 border-t border-gray-100 bg-[#fcfcfc] animate-in slide-in-from-top-2 duration-300">
-                      <div className="flex flex-col md:flex-row gap-8">
-                        <div className="w-full md:w-64 shrink-0 space-y-3">
-                           <div className="aspect-[3/4] bg-black relative overflow-hidden group shadow-inner border border-gray-200">
-                              <img 
-                                src={record.image} 
-                                className={`w-full h-full object-cover transition-all duration-700 ${isUnlocked ? 'blur-0 opacity-100' : 'blur-xl opacity-50'}`} 
-                                alt="Secure Content"
-                              />
-                              <button 
-                                onClick={(e) => toggleImageLock(e, record.id)}
-                                className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/10 hover:bg-black/20 transition-all z-10 w-full"
-                              >
-                                 <div className={`p-4 rounded-full backdrop-blur-md border ${isUnlocked ? 'bg-white/10 border-white/20' : 'bg-black/50 border-white/10'}`}>
-                                   {isUnlocked ? <Unlock size={24} className="text-white" /> : <Lock size={24} className="text-white" />}
-                                 </div>
-                                 <p className="text-[9px] font-black text-white uppercase tracking-widest shadow-black drop-shadow-md">
-                                   {isUnlocked ? 'TAP TO LOCK' : 'TAP TO DECRYPT'}
-                                 </p>
-                              </button>
-                           </div>
-                        </div>
-                        <div className="flex-1 space-y-4">
-                           <h4 className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest border-b border-gray-200 pb-2">Archived Analysis Data</h4>
-                           <div className="bg-white p-6 border border-gray-100 h-64 overflow-y-auto custom-scrollbar">
-                             <RichTextParser text={record.analysis} />
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-      <style>{`
-        @keyframes scan {
-          0% { top: 0; }
-          50% { top: 100%; }
-          100% { top: 0; }
-        }
-      `}</style>
     </div>
   );
 };

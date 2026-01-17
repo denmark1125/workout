@@ -1,23 +1,23 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import Sidebar from './components/Sidebar';
-import MobileNav from './components/MobileNav';
-import AuthScreen from './components/AuthScreen';
-import DataEngine from './components/DataEngine';
-import PhysiqueScanner from './components/PhysiqueScanner';
-import WeeklyReport from './components/WeeklyReport';
-import Settings from './components/Settings';
-import TrainingJournal from './components/TrainingJournal';
-import AdminPanel from './components/AdminPanel';
-import RewardVault from './components/RewardVault'; 
-import DailyRewardModal from './components/DailyRewardModal';
-import Onboarding from './components/Onboarding'; 
-import NutritionDeck from './components/NutritionDeck'; 
-import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog, WeeklyReportData } from './types';
-import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
-import { getDailyBriefing, getLocalDavidGreeting } from './services/geminiService'; 
-import { getLocalTimestamp } from './utils/calculations';
-import { REWARDS_DATABASE } from './utils/rewardAssets';
+import Sidebar from './components/Sidebar.tsx';
+import MobileNav from './components/MobileNav.tsx';
+import AuthScreen from './components/AuthScreen.tsx';
+import DataEngine from './components/DataEngine.tsx';
+import PhysiqueScanner from './components/PhysiqueScanner.tsx';
+import WeeklyReport from './components/WeeklyReport.tsx';
+import Settings from './components/Settings.tsx';
+import TrainingJournal from './components/TrainingJournal.tsx';
+import AdminPanel from './components/AdminPanel.tsx';
+import RewardVault from './components/RewardVault.tsx'; 
+import DailyRewardModal from './components/DailyRewardModal.tsx';
+import Onboarding from './components/Onboarding.tsx'; 
+import NutritionDeck from './components/NutritionDeck.tsx'; 
+import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog, WeeklyReportData } from './types.ts';
+import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService.ts';
+import { getDailyBriefing, getLocalDavidGreeting } from './services/geminiService.ts'; 
+import { getLocalTimestamp } from './utils/calculations.ts';
+import { REWARDS_DATABASE } from './utils/rewardAssets.tsx';
 import { Loader2, Terminal, Cloud, CloudOff, AlertTriangle, ShieldOff } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -28,24 +28,14 @@ const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
   
-  const [showRewardModal, setShowRewardModal] = useState(false);
-  const [pendingReward, setPendingReward] = useState<any>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  
   const [davidGreeting, setDavidGreeting] = useState<string>("");
-  
-  const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
-    return localStorage.getItem('matrix_active_user');
-  });
-
+  const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => localStorage.getItem('matrix_active_user'));
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const session = sessionStorage.getItem('matrix_session');
     return session === 'active' && !!localStorage.getItem('matrix_active_user');
   });
-  
   const [loginError, setLoginError] = useState(false);
 
-  // 預設設定檔，用於深度合併防止 Undefined 報錯
   const DEFAULT_PROFILE: UserProfile = {
     name: 'User', age: 25, height: 175, gender: 'M', goal: FitnessGoal.HYPERTROPHY,
     equipment: [], customEquipmentPool: [], customGoalText: '',
@@ -89,16 +79,14 @@ const App: React.FC = () => {
           fetchFromCloud('reports', currentMemberId)
         ]);
         
-        // 深度合併 Profile，防止 Undefined 造成的 reduce 報錯
         if (p) setProfile(prev => ({ ...DEFAULT_PROFILE, ...prev, ...p }));
-        if (m) setMetrics(Array.isArray(m) ? m : []);
-        if (l) setLogs(Array.isArray(l) ? l : []);
-        if (ph) setPhysiqueRecords(Array.isArray(ph) ? ph : []);
-        if (d) setDietLogs(Array.isArray(d) ? d : []);
-        if (r) setReports(Array.isArray(r) ? r : []);
-
+        setMetrics(Array.isArray(m) ? m : []);
+        setLogs(Array.isArray(l) ? l : []);
+        setPhysiqueRecords(Array.isArray(ph) ? ph : []);
+        setDietLogs(Array.isArray(d) ? d : []);
+        setReports(Array.isArray(r) ? r : []);
       } catch (e) {
-        console.error("初始化雲端資料失敗", e);
+        console.error("Cloud data fetch failed", e);
       } finally {
         setIsSyncing(false);
         setIsDataLoaded(true);
@@ -109,11 +97,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isDataLoaded || !isAuthenticated || !currentMemberId) return;
-
     const performSync = async () => {
       const canSync = profile.privacySettings?.syncMetrics ?? true;
       if (!canSync) return;
-
       setIsSyncing(true);
       setSyncError(false);
       try {
@@ -131,7 +117,6 @@ const App: React.FC = () => {
         setIsSyncing(false);
       }
     };
-
     const timer = setTimeout(performSync, 2000);
     return () => clearTimeout(timer);
   }, [profile, metrics, logs, physiqueRecords, dietLogs, reports, isAuthenticated, currentMemberId, isDataLoaded]);
@@ -180,30 +165,15 @@ const App: React.FC = () => {
            
            <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-sm border border-white/10">
              {!syncEnabled ? (
-               <div className="flex items-center gap-2 text-gray-400">
-                 <ShieldOff size={14} />
-                 <span className="text-[10px] font-black uppercase tracking-widest">隱私模式 PRIVATE</span>
-               </div>
+               <div className="flex items-center gap-2 text-gray-400"><ShieldOff size={14} /><span className="text-[10px] font-black uppercase tracking-widest">隱私模式 PRIVATE</span></div>
              ) : syncError ? (
-               <div className="flex items-center gap-2 text-red-500">
-                 <AlertTriangle size={14} className="animate-pulse" />
-                 <span className="text-[10px] font-black uppercase tracking-widest">同步失敗 SYNC_ERR</span>
-               </div>
+               <div className="flex items-center gap-2 text-red-500"><AlertTriangle size={14} className="animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest">同步失敗 SYNC_ERR</span></div>
              ) : isSyncing ? (
-               <div className="flex items-center gap-2 text-[#bef264]">
-                 <Loader2 size={14} className="animate-spin" />
-                 <span className="text-[10px] font-black uppercase tracking-widest">同步中 UPLOADING...</span>
-               </div>
+               <div className="flex items-center gap-2 text-[#bef264]"><Loader2 size={14} className="animate-spin" /><span className="text-[10px] font-black uppercase tracking-widest">同步中 UPLOADING...</span></div>
              ) : dbConnected ? (
-               <div className="flex items-center gap-2 text-[#bef264]">
-                 <Cloud size={14} />
-                 <span className="text-[10px] font-black uppercase tracking-widest">雲端連線 ONLINE</span>
-               </div>
+               <div className="flex items-center gap-2 text-[#bef264]"><Cloud size={14} /><span className="text-[10px] font-black uppercase tracking-widest">雲端連線 ONLINE</span></div>
              ) : (
-               <div className="flex items-center gap-2 text-gray-500">
-                 <CloudOff size={14} />
-                 <span className="text-[10px] font-black uppercase tracking-widest">離線模式 OFFLINE</span>
-               </div>
+               <div className="flex items-center gap-2 text-gray-500"><CloudOff size={14} /><span className="text-[10px] font-black uppercase tracking-widest">離線模式 OFFLINE</span></div>
              )}
            </div>
         </div>
@@ -222,7 +192,7 @@ const App: React.FC = () => {
           {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} weeklyReports={reports} onAddReport={(r) => setReports(prev => [r, ...prev])} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
-          {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => setShowOnboarding(true)} />}
+          {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => {}} />}
         </div>
       </main>
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} isAdmin={isAdmin} />
