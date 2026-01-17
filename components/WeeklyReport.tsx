@@ -90,7 +90,7 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
       const result = await generateWeeklyReport(profile, metrics, logs, physiqueRecords);
       setReport(result || "生成失敗，系統無效回饋。");
       
-      if (profile.role !== 'admin' && !result.includes('存取限制')) {
+      if (profile.role !== 'admin' && !result.includes('存取限制') && !result.includes('流量管制') && !result.includes('連線逾時')) {
         onProfileUpdate({
           ...profile,
           weeklyReportUsage: {
@@ -99,8 +99,8 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
           }
         });
       }
-    } catch (err) {
-      setReport("與核心引擎連線異常，請檢查網路狀態。");
+    } catch (err: any) {
+      setReport(err.message || "與核心引擎連線異常，請檢查網路狀態。");
     } finally {
       setLoading(false);
     }
@@ -122,10 +122,17 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
           <button
             onClick={handleGenerate}
             disabled={loading || isLimitReached}
-            className={`px-10 py-5 font-black uppercase tracking-[0.3em] text-xs transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1
+            className={`px-10 py-5 font-black uppercase tracking-[0.2em] text-xs transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1
               ${loading || isLimitReached ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-[#bef264] hover:bg-[#bef264] hover:text-black'}`}
           >
-            {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> COMPUTING...</> : <><Zap className="w-5 h-5 fill-current" /> 生成戰略報告</>}
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" /> 
+                <span className="animate-pulse">David 戰略官分析中...</span>
+              </>
+            ) : (
+              <><Zap className="w-5 h-5 fill-current" /> 生成戰略報告</>
+            )}
           </button>
         </div>
       </header>

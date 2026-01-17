@@ -68,6 +68,27 @@ const SYSTEM_INSTRUCTION = `
 4. 條列式重點請使用 - 符號。
 `;
 
+// --- Helper: Robust AI Call Wrapper ---
+async function callAIWithRetry<T>(operation: () => Promise<T>, retries = 1): Promise<T> {
+  try {
+    return await operation();
+  } catch (error: any) {
+    console.error("AI Operation Failed:", error);
+    
+    // Handle AbortError / Timeout explicitly
+    if (error.name === 'AbortError' || error.message?.includes('timeout') || error.message?.includes('aborted')) {
+       throw new Error("連線逾時。David 戰略官正在進行深度戰術推演，請檢查網路並稍後重試 (建議等待 60 秒)。");
+    }
+
+    if (retries > 0) {
+      console.log(`Retrying AI operation... (${retries} left)`);
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
+      return callAIWithRetry(operation, retries - 1);
+    }
+    throw error;
+  }
+}
+
 // --- Public API Functions ---
 
 /**
@@ -115,7 +136,7 @@ export const getDavidGreeting = async (profile: UserProfile): Promise<string> =>
  * 食物辨識與營養分析
  */
 export const analyzeFoodImage = async (base64Image: string): Promise<{ name: string; macros: MacroNutrients } | null> => {
-  try {
+  return callAIWithRetry(async () => {
     const ai = getAIInstance();
     const prompt = `
       辨識圖中食物。
@@ -152,10 +173,7 @@ export const analyzeFoodImage = async (base64Image: string): Promise<{ name: str
     }
     
     return JSON.parse(jsonMatch[0]);
-  } catch (error) {
-    console.error("Food Analysis Failed", error);
-    return null;
-  }
+  });
 };
 
 /**
@@ -165,7 +183,7 @@ export const calculateAiNutritionPlan = async (
    weight: number, height: number, age: number, gender: string,
    activity: ActivityLevel, goal: string, dietPref: DietaryPreference
 ): Promise<{ dailyCalorieTarget: number, macroTargets: { protein: number, carbs: number, fat: number }, advice: string } | null> => {
-   try {
+   return callAIWithRetry(async () => {
       const ai = getAIInstance();
       const prompt = `
          作為專業運動營養師 David，請為以下學員計算 TDEE 與營養素目標：
@@ -204,10 +222,7 @@ export const calculateAiNutritionPlan = async (
          },
          advice: data.advice
       };
-   } catch (error) {
-      console.error("AI Calibration Failed", error);
-      return null;
-   }
+   });
 };
 
 /**
@@ -233,7 +248,7 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
     任務：給予一段短評 (50字內)，包含肯定與一個具體建議。
   `;
 
-  try {
+  return callAIWithRetry(async () => {
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview", 
@@ -244,13 +259,7 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
     const result = response.text?.trim() || "David 教練：今日表現穩健。";
     localStorage.setItem(cacheKey, result);
     return result;
-
-  } catch (error: any) {
-    if (error.message?.includes('429')) {
-       return "David 教練：系統運算量過載。你的努力我看到了，今天的訓練強度很棒，保持下去。";
-    }
-    return "David 教練：資料鏈路不穩，但你的訓練數據已安全封存。";
-  }
+  });
 };
 
 /**
@@ -282,18 +291,20 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
     },
   };
 
-  try {
-    const ai = getAIInstance();
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview", 
-      contents: { parts: [imagePart, { text: prompt }] },
-      config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
-    });
-    return response.text || "David 教練：目前無法解析該體態數據。";
-  } catch (error: any) {
-    if (error.message?.includes('429')) return "### ⚠️ 系統忙碌\nDavid 教練：視覺核心目前滿載。請稍後再試。";
-    return `### ⚠️ 系統連線異常\nDavid 教練：無法連接至視覺核心。`;
-  }
+  return callAIWithRetry(async () => {
+    try {
+      const ai = getAIInstance();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview", 
+        contents: { parts: [imagePart, { text: prompt }] },
+        config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
+      });
+      return response.text || "David 教練：目前無法解析該體態數據。";
+    } catch (error: any) {
+      if (error.message?.includes('429')) return "### ⚠️ 系統忙碌\nDavid 教練：視覺核心目前滿載。請稍後再試。";
+      throw error;
+    }
+  });
 };
 
 /**
@@ -333,31 +344,33 @@ export const generateWeeklyReport = async (
     4. 嚴禁使用星號 (***) 或其他 Markdown 符號。
   `;
 
-  try {
-    const ai = getAIInstance();
-    const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        tools: [{ googleSearch: {} }],
-      },
-    });
-
-    let outputText = response.text || "David 教練：週報分析中，請稍候。";
-    
-    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (sources && sources.length > 0) {
-      outputText += "\n### 戰略參考資料\n";
-      sources.forEach((chunk: any) => {
-        if (chunk.web?.uri) outputText += `- [${chunk.web.title || 'Source'}](${chunk.web.uri})\n`;
+  return callAIWithRetry(async () => {
+    try {
+      const ai = getAIInstance();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-pro-preview",
+        contents: prompt,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          tools: [{ googleSearch: {} }],
+        },
       });
+
+      let outputText = response.text || "David 教練：週報分析中，請稍候。";
+      
+      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (sources && sources.length > 0) {
+        outputText += "\n### 戰略參考資料\n";
+        sources.forEach((chunk: any) => {
+          if (chunk.web?.uri) outputText += `- [${chunk.web.title || 'Source'}](${chunk.web.uri})\n`;
+        });
+      }
+      return outputText;
+    } catch (error: any) {
+      if (error.message?.includes('429')) return "### ⚠️ 流量管制\nDavid 教練：戰略指揮部目前通訊繁忙。請稍後再索取報告。";
+      throw error;
     }
-    return outputText;
-  } catch (error: any) {
-    if (error.message?.includes('429')) return "### ⚠️ 流量管制\nDavid 教練：戰略指揮部目前通訊繁忙。請稍後再索取報告。";
-    return `### ⚠️ 生成失敗\nDavid 教練：系統離線。`;
-  }
+  });
 };
 
 /**
@@ -365,15 +378,18 @@ export const generateWeeklyReport = async (
  */
 export const getDailyBriefing = async (profile: UserProfile, streak: number): Promise<string> => {
   const prompt = `連續登入第 ${streak} 天。目標：${GoalMetadata[profile.goal]?.label || profile.goal}。給一句簡短肯定。`;
-  try {
-    const ai = getAIInstance();
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: { temperature: 0.9 }
-    });
-    return response.text?.trim() || `"${profile.name}，你的堅持是系統最強大的演算法。"`;
-  } catch (error) {
-    return `"${profile.name}，你的堅持是系統最強大的演算法。"`;
-  }
+  
+  return callAIWithRetry(async () => {
+    try {
+      const ai = getAIInstance();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: { temperature: 0.9 }
+      });
+      return response.text?.trim() || `"${profile.name}，你的堅持是系統最強大的演算法。"`;
+    } catch (error) {
+      return `"${profile.name}，你的堅持是系統最強大的演算法。"`;
+    }
+  });
 };

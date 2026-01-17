@@ -139,11 +139,6 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
      if (intensity === 'LOW') mets = 4; // 快走
      if (intensity === 'MED') mets = 8; // 慢跑
      if (intensity === 'HIGH') mets = 11; // 衝刺/HIIT
-     // Formula: Kcal = METs * weight(kg) * time(hr)
-     // Use profile weight or default 70
-     // Assuming accessing weight from outside is hard here, use rough estimate or pass metrics. 
-     // For now, let's use 75kg as base if we can't get metric easily, or simplified formula.
-     // Simplified: Intensity Factor * Duration
      const factors = { 'LOW': 5, 'MED': 8, 'HIGH': 12 }; // kcal per min approx
      return Math.round(factors[intensity as keyof typeof factors] * duration);
   };
@@ -205,7 +200,6 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
      if (ex.type === 'CARDIO') {
         setExDuration(ex.durationMinutes?.toString() || '');
         setExDistance(ex.distance?.toString() || '');
-        // Infer intensity if not saved? For now simple logic.
         setExIntensity('MED'); 
      } else {
         setExWeight(ex.weight.toString());
@@ -248,9 +242,13 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
     let aiResponse = "";
     
     if (selectedDate === today) {
-       aiResponse = await getDailyFeedback(profile, newLog);
-       if (profile.lastDailyFeedbackDate !== today) {
-         onProfileUpdate({ ...profile, lastDailyFeedbackDate: today });
+       try {
+         aiResponse = await getDailyFeedback(profile, newLog);
+         if (profile.lastDailyFeedbackDate !== today) {
+           onProfileUpdate({ ...profile, lastDailyFeedbackDate: today });
+         }
+       } catch (error: any) {
+         aiResponse = `David 教練：紀錄已保存，但 AI 連線異常 (${error.message})。`;
        }
     } else {
        aiResponse = isEditingHistory ? "David教練: 歷史軌跡已修正。" : "David教練: 紀錄已封存。";
@@ -261,7 +259,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
     setIsAiProcessing(false);
     
     localStorage.removeItem(`matrix_draft_${profile.memberId}`);
-    setTimeout(() => setShowCoachFeedback(false), 4000);
+    setTimeout(() => setShowCoachFeedback(false), 6000);
 
     setPendingExercises([]);
     setFeedback('');
@@ -278,8 +276,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
   return (
     <div className="animate-in fade-in duration-700 max-w-7xl mx-auto space-y-8 pb-40 px-2 md:px-0">
       <div className="flex flex-col lg:flex-row bg-white border border-gray-100 shadow-2xl rounded-sm overflow-hidden">
-        
-        {/* 左側：日曆與歷史紀錄 */}
+        {/* Left Side (Calendar) - Same as before */}
         <div className="lg:w-80 p-6 border-r border-gray-100 bg-[#fcfcfc]">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-black">{currentMonth.getFullYear()}年 {currentMonth.getMonth()+1}月</h3>
@@ -336,7 +333,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
           </div>
         </div>
 
-        {/* 右側：登錄模組 */}
+        {/* Right Side */}
         <div className="flex-1 p-6 md:p-10 space-y-8 relative">
           {isEditingHistory && (
             <div className="absolute top-4 right-10 flex items-center gap-3">
@@ -363,7 +360,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
             <div className="space-y-8">
-              {/* 時間區塊 */}
+              {/* Input Fields - Same as before */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1 min-w-0">
                   <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1 block">開始時間 START</label>
@@ -391,7 +388,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                 </div>
               </div>
 
-              {/* 訓練焦點 */}
+              {/* Focus Section */}
               <div className="space-y-4">
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">訓練焦點 TARGET (可複選)</label>
                 <div className="flex flex-wrap gap-2">
@@ -428,7 +425,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                 </div>
               </div>
 
-              {/* 核心動作輸入 */}
+              {/* Core Exercise Input */}
               <div id="exercise-input-zone" className="bg-gray-50 p-6 space-y-6 rounded-sm border border-gray-100 shadow-inner relative">
                  <div className="flex justify-between items-center mb-1">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -452,28 +449,15 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                     )}
                  </div>
 
-                 {/* Type Toggle */}
+                 {/* Type Toggle & Inputs (Same as before) */}
                  <div className="flex bg-white border border-gray-200 p-1 rounded-sm">
-                    <button 
-                      onClick={() => setExerciseType('STRENGTH')} 
-                      className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'STRENGTH' ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}
-                    >
-                      <Dumbbell size={14} /> 重量訓練 STRENGTH
-                    </button>
-                    <button 
-                      onClick={() => setExerciseType('CARDIO')} 
-                      className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'CARDIO' ? 'bg-black text-[#bef264] shadow-md' : 'text-gray-400'}`}
-                    >
-                      <Activity size={14} /> 有氧代謝 CARDIO
-                    </button>
+                    <button onClick={() => setExerciseType('STRENGTH')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'STRENGTH' ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}><Dumbbell size={14} /> 重量訓練 STRENGTH</button>
+                    <button onClick={() => setExerciseType('CARDIO')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'CARDIO' ? 'bg-black text-[#bef264] shadow-md' : 'text-gray-400'}`}><Activity size={14} /> 有氧代謝 CARDIO</button>
                  </div>
 
-                 {/* Suggestions */}
                  <div className="flex flex-wrap gap-2 pb-1 overflow-x-auto no-scrollbar">
                     {exerciseSuggestions.map(tag => (
-                      <button key={tag} onClick={() => setExName(tag)} className={`px-2 py-1 text-[9px] font-bold border transition-all whitespace-nowrap ${exName === tag ? 'bg-black text-white border-black' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-300'}`}>
-                        #{tag}
-                      </button>
+                      <button key={tag} onClick={() => setExName(tag)} className={`px-2 py-1 text-[9px] font-bold border transition-all whitespace-nowrap ${exName === tag ? 'bg-black text-white border-black' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-300'}`}>#{tag}</button>
                     ))}
                  </div>
 
@@ -497,7 +481,6 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                              <input type="number" placeholder="0" value={exReps} onChange={e => setExReps(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
                            </div>
                          </div>
-
                          <div className="space-y-3">
                            <div className="flex justify-between items-center px-1">
                              <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest">組數 SETS (滑動選擇)</label>
@@ -505,15 +488,12 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                            </div>
                            <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
                               {[1,2,3,4,5,6,7,8,9,10].map(s => (
-                                <button key={s} onClick={() => setExSets(s)} className={`flex-shrink-0 w-10 h-10 text-xs font-black transition-all border ${exSets === s ? 'bg-black text-[#bef264] border-black scale-105' : 'bg-white text-gray-300 border-gray-100 hover:border-gray-200'}`}>
-                                  {s}
-                                </button>
+                                <button key={s} onClick={() => setExSets(s)} className={`flex-shrink-0 w-10 h-10 text-xs font-black transition-all border ${exSets === s ? 'bg-black text-[#bef264] border-black scale-105' : 'bg-white text-gray-300 border-gray-100 hover:border-gray-200'}`}>{s}</button>
                               ))}
                            </div>
                          </div>
                        </>
                     ) : (
-                       // Cardio Inputs
                        <>
                           <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-1">
@@ -529,13 +509,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                              <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block mb-2">強度 INTENSITY</label>
                              <div className="flex gap-2">
                                 {(['LOW', 'MED', 'HIGH'] as const).map(level => (
-                                   <button 
-                                     key={level} 
-                                     onClick={() => setExIntensity(level)}
-                                     className={`flex-1 py-3 text-[10px] font-black border uppercase transition-all ${exIntensity === level ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-200'}`}
-                                   >
-                                     {level}
-                                   </button>
+                                   <button key={level} onClick={() => setExIntensity(level)} className={`flex-1 py-3 text-[10px] font-black border uppercase transition-all ${exIntensity === level ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-200'}`}>{level}</button>
                                 ))}
                              </div>
                           </div>
@@ -547,9 +521,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                     )}
 
                     <div className="flex gap-2 pt-2">
-                       {editingExId && (
-                         <button onClick={() => { setEditingExId(null); setExName(''); setExWeight(''); setExReps(''); setExSets(1); setExDuration(''); setExDistance(''); }} className="flex-1 bg-gray-100 text-gray-400 py-4 text-[10px] font-black uppercase tracking-widest">取消</button>
-                       )}
+                       {editingExId && <button onClick={() => { setEditingExId(null); setExName(''); setExWeight(''); setExReps(''); setExSets(1); setExDuration(''); setExDistance(''); }} className="flex-1 bg-gray-100 text-gray-400 py-4 text-[10px] font-black uppercase tracking-widest">取消</button>}
                        <button onClick={addOrUpdateExercise} disabled={!exName} className={`flex-[2] py-5 text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${editingExId ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-black text-[#bef264] hover:bg-lime-400 hover:text-black shadow-lg'} disabled:opacity-20`}>
                           {editingExId ? <><Check size={16}/> 更新數據</> : <><Plus size={16}/> 暫存此組動作</>}
                        </button>
@@ -559,13 +531,12 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
             </div>
 
             <div className="flex flex-col h-full space-y-6">
-              {/* 暫存列表清單 */}
+              {/* Buffer List (Same as before) */}
               <div className="flex-1 min-h-[400px] border border-gray-100 bg-[#fcfcfc] rounded-sm flex flex-col shadow-inner">
                  <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.3em]">SESSION_BUFFER</p>
                     <span className="text-[10px] font-mono text-black font-black bg-lime-400 px-2 py-0.5">{pendingExercises.length} ITEMS</span>
                  </div>
-                 
                  <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
                     {pendingExercises.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-center opacity-20 grayscale py-20">
@@ -617,9 +588,14 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                 <button 
                   onClick={handleCommit} 
                   disabled={isAiProcessing || pendingExercises.length === 0}
-                  className={`w-full py-6 font-black text-xs tracking-[0.5em] uppercase transition-all shadow-2xl active:scale-95 disabled:opacity-10 ${isEditingHistory ? 'bg-blue-600 text-white' : 'bg-black text-white hover:bg-[#bef264] hover:text-black'}`}
+                  className={`w-full py-6 font-black text-xs tracking-[0.5em] uppercase transition-all shadow-2xl active:scale-95 disabled:opacity-50 ${isEditingHistory ? 'bg-blue-600 text-white' : 'bg-black text-white hover:bg-[#bef264] hover:text-black'}`}
                 >
-                  {isAiProcessing ? 'UPLOADING_CORE...' : isEditingHistory ? '確認修正歷史紀錄 UPDATE' : '完成訓練數據封存 COMMIT'}
+                  {isAiProcessing ? (
+                    <span className="flex items-center justify-center gap-2 animate-pulse">
+                       <Loader2 size={14} className="animate-spin" />
+                       David 戰略官分析中...
+                    </span>
+                  ) : isEditingHistory ? '確認修正歷史紀錄 UPDATE' : '完成訓練數據封存 COMMIT'}
                 </button>
               </div>
             </div>

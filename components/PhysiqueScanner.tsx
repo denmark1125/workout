@@ -105,7 +105,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         analysis: textResult
       });
       // 更新狀態以鎖定今日使用
-      if (profile.role !== 'admin' && !textResult.includes('存取限制')) {
+      if (profile.role !== 'admin' && !textResult.includes('存取限制') && !textResult.includes('連線逾時')) {
          onProfileUpdate({ ...profile, lastPhysiqueAnalysisDate: today });
       }
     } catch (err) {
@@ -173,7 +173,12 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
               !image || loading || isLimitReached ? 'bg-gray-100 text-gray-300' : 'bg-black text-white hover:bg-lime-400 hover:text-black uppercase animate-glow'
             }`}
           >
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> 分析中...</> : isLimitReached ? '明日再戰 (COOLDOWN)' : '啟動 AI 體態診斷'}
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="animate-pulse">David 戰略官分析中...</span>
+              </>
+            ) : isLimitReached ? '明日再戰 (COOLDOWN)' : '啟動 AI 體態診斷'}
           </button>
         </div>
 

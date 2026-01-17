@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { RewardItem, RewardIcon } from '../utils/rewardAssets';
 import { Zap, ShieldCheck, Terminal, ArrowRight, Loader2 } from 'lucide-react';
@@ -52,7 +53,7 @@ const DailyRewardModal: React.FC<DailyRewardModalProps> = ({ reward, streak, onC
            {isLoadingBriefing ? (
              <div className="flex items-center gap-2 text-white/50 text-xs py-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="font-mono">Downloading Tactical Briefing...</span>
+                <span className="font-mono animate-pulse">David 戰略官分析中 (Syncing Tactical Briefing)...</span>
              </div>
            ) : (
              <p className="text-white text-sm font-bold italic leading-relaxed animate-in fade-in">
