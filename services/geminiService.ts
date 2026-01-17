@@ -34,7 +34,7 @@ const DAVID_QUOTES = [
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  // 依照您的指示修正：VITE_WORKOUT_GEMINI_API
+  // 修正：使用 Vite 的環境變數方式，並指定變數名稱 VITE_WORKOUT_GEMINI_API
   const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;
   
   if (!apiKey) {

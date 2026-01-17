@@ -6,17 +6,15 @@ import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } fro
 // Destructure from the namespace to bypass potential missing type exports in certain environments
 const { initializeApp, getApps, getApp } = firebaseApp as any;
 
-// 1. 修正環境變數讀取方式：Vite 專案必須使用 import.meta.env
-// 2. 變數名稱依照您的指示修正，並移除可能導致語法錯誤的多餘符號
+// 1. 修正環境變數讀取方式：使用 import.meta.env 並移除預設字串，確保讀取 Vercel/本地 環境變數
 const firebaseConfig = {
-  // 依照截圖名稱修正：VITE_FIREBASE_API
-  apiKey: import.meta.env.VITE_FIREBASE_API || "AIzaSyAdr5J_-sf3Q486Wzmri3gYdOJLC-pMZEE",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "workout-app-20752.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "workout-app-20752",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "workout-app-20752.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "649579159803",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:649579159803:web:886b8bb1e56a0c2dda505e",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-GXX10CEYPK"
+  apiKey: import.meta.env.VITE_FIREBASE_API,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Use any for types to resolve environment-specific module resolution issues with Firebase exports
