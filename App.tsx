@@ -12,16 +12,18 @@ import AdminPanel from './components/AdminPanel';
 import RewardVault from './components/RewardVault'; 
 import DailyRewardModal from './components/DailyRewardModal';
 import Onboarding from './components/Onboarding'; 
-import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord } from './types';
+import NutritionDeck from './components/NutritionDeck'; // New Component
+import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
 import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; 
 import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
 import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
-import { Loader2, AlertTriangle, LogOut, Terminal } from 'lucide-react';
+import { Loader2, AlertTriangle, LogOut, Terminal, Cloud, CloudOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false); // CRITICAL: 資料載入保護鎖
   const [isAdmin, setIsAdmin] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
   
@@ -61,12 +63,14 @@ const App: React.FC = () => {
     lastDailyFeedbackDate: '',
     lastPhysiqueAnalysisDate: '',
     weeklyReportUsage: { weekId: '', count: 0 },
-    privacySettings: { syncPhysiqueImages: true, syncMetrics: true } // 預設開啟
+    privacySettings: { syncPhysiqueImages: true, syncMetrics: true },
+    dailyCalorieTarget: 2200 
   });
 
   const [metrics, setMetrics] = useState<UserMetrics[]>([]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [physiqueRecords, setPhysiqueRecords] = useState<PhysiqueRecord[]>([]);
+  const [dietLogs, setDietLogs] = useState<DietLog[]>([]); // New State
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -114,16 +118,18 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated, profile.name]);
 
+  // 1. 下載資料 (Data Fetching)
   useEffect(() => {
     const initializeCloudData = async () => {
       if (!db || !isAuthenticated || !currentMemberId) return;
       setIsSyncing(true);
       try {
-        const [p, m, l, ph] = await Promise.all([
+        const [p, m, l, ph, dlogs] = await Promise.all([
           fetchFromCloud('profiles', currentMemberId),
           fetchFromCloud('metrics', currentMemberId),
           fetchFromCloud('logs', currentMemberId),
-          fetchFromCloud('physique', currentMemberId)
+          fetchFromCloud('physique', currentMemberId),
+          fetchFromCloud('diet', currentMemberId) // Fetch Diet
         ]);
         
         if (p) {
@@ -134,7 +140,8 @@ const App: React.FC = () => {
           if (currentMemberId === 'admin_roots') updatedProfile.role = 'admin';
           if (!updatedProfile.privacySettings) updatedProfile.privacySettings = { syncPhysiqueImages: true, syncMetrics: true };
           if (updatedProfile.hasCompletedOnboarding === false) setShowOnboarding(true);
-          
+          if (!updatedProfile.dailyCalorieTarget) updatedProfile.dailyCalorieTarget = 2200;
+
           const lastLogin = new Date(updatedProfile.lastLoginDate || todayStr);
           const diffDays = (today.getTime() - lastLogin.getTime()) / (1000 * 3600 * 24);
           
@@ -164,6 +171,8 @@ const App: React.FC = () => {
               updatedProfile.loginStreak = 1;
             }
             updatedProfile.lastLoginDate = todayStr;
+            
+            // 立即同步登入日期，不依賴下面的自動同步 useEffect
             syncToCloud('profiles', updatedProfile, currentMemberId);
           }
           setProfile(updatedProfile);
@@ -173,17 +182,24 @@ const App: React.FC = () => {
         if (m) setMetrics(m);
         if (l) setLogs(l);
         if (ph) setPhysiqueRecords(ph);
+        if (dlogs) setDietLogs(dlogs);
         
-      } catch (e) { console.warn("同步失敗"); } finally { setIsSyncing(false); }
+      } catch (e) { 
+        console.warn("同步失敗", e); 
+      } finally { 
+        setIsSyncing(false);
+        setIsDataLoaded(true); 
+      }
     };
     initializeCloudData();
   }, [isAuthenticated, currentMemberId]);
 
+  // 2. 自動上傳 (Auto-Sync) - 嚴格保護
   useEffect(() => {
-    if (!isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
+    if (!isDataLoaded || !isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
     
     const timer = setTimeout(() => {
-      // 1. 同步設定檔 (包含隱私設定本身)
+      // 1. 同步設定檔
       syncToCloud('profiles', profile, currentMemberId);
 
       // 2. 判斷隱私決定是否上傳生理數據
@@ -191,10 +207,13 @@ const App: React.FC = () => {
         syncToCloud('metrics', metrics, currentMemberId);
       }
       
-      // 3. 訓練日誌始終同步 (或根據需要擴充設定)
+      // 3. 訓練日誌始終同步
       syncToCloud('logs', logs, currentMemberId);
+
+      // 4. 飲食日誌始終同步
+      syncToCloud('diet', dietLogs, currentMemberId);
       
-      // 4. 判斷隱私決定是否上傳照片
+      // 5. 判斷隱私決定是否上傳照片
       if (profile.privacySettings?.syncPhysiqueImages) {
         syncToCloud('physique', physiqueRecords, currentMemberId);
       } else {
@@ -205,7 +224,7 @@ const App: React.FC = () => {
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [profile, metrics, logs, physiqueRecords, isAuthenticated, currentMemberId, isAdmin]);
+  }, [profile, metrics, logs, physiqueRecords, dietLogs, isAuthenticated, currentMemberId, isAdmin, isDataLoaded]);
 
   const handleClaimReward = () => {
     if (!pendingReward) return;
@@ -268,6 +287,7 @@ const App: React.FC = () => {
   const executeAuth = (uid: string) => {
     setCurrentMemberId(uid);
     setIsAuthenticated(true);
+    setIsDataLoaded(false); 
     sessionStorage.setItem('matrix_session', 'active');
     localStorage.setItem('matrix_active_user', uid);
     recordLoginEvent(uid);
@@ -279,12 +299,28 @@ const App: React.FC = () => {
     localStorage.removeItem('matrix_active_user');
     setCurrentMemberId(null);
     setIsAuthenticated(false);
+    setIsDataLoaded(false);
+    setMetrics([]);
+    setLogs([]);
+    setDietLogs([]);
+    setPhysiqueRecords([]);
     setActiveTab('dashboard');
     if (isAuto) alert("系統偵測到您已閒置超過3小時，已自動登出。");
   };
 
   const handleUpdateWorkoutLog = (updatedLog: WorkoutLog) => {
     setLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
+  };
+
+  const handleUpdateDietLog = (updatedLog: DietLog) => {
+     setDietLogs(prev => {
+        const exists = prev.find(l => l.date === updatedLog.date);
+        if (exists) {
+           return prev.map(l => l.date === updatedLog.date ? updatedLog : l);
+        } else {
+           return [...prev, updatedLog];
+        }
+     });
   };
 
   if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} loginError={loginError} />;
@@ -302,10 +338,29 @@ const App: React.FC = () => {
              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-0.5">David Coach Uplink</p>
              <p className="text-sm font-bold font-mono leading-tight">{isGreetingLoading && !davidGreeting ? <span className="animate-pulse">Analyzing Biometrics...</span> : <span className="animate-in fade-in duration-700">{davidGreeting}</span>}</p>
            </div>
+           {/* Cloud Status Indicator */}
+           <div className="flex items-center gap-2">
+             {isSyncing ? (
+               <div className="flex items-center gap-1 text-[9px] font-black uppercase text-[#bef264] animate-pulse">
+                 <Loader2 size={10} className="animate-spin" /> Fetching
+               </div>
+             ) : isDataLoaded ? (
+               <Cloud size={14} className="text-[#bef264]" />
+             ) : (
+               <CloudOff size={14} className="text-red-500" />
+             )}
+           </div>
         </div>
 
         <div className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 animate-in fade-in duration-500">
+          {!isDataLoaded && (
+            <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
+              <Loader2 className="w-10 h-10 animate-spin text-black mb-4" />
+              <p className="text-xs font-black uppercase tracking-widest text-gray-500">Retrieving Cloud Data...</p>
+            </div>
+          )}
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
+          {activeTab === 'diet' && <NutritionDeck dietLogs={dietLogs} onUpdateDietLog={handleUpdateDietLog} profile={profile} workoutLogs={logs} />}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onUpdateLog={handleUpdateWorkoutLog} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} profile={profile} onProfileUpdate={setProfile} />}
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} onDeleteRecord={(id) => setPhysiqueRecords(prev => prev.filter(r => r.id !== id))} onProfileUpdate={setProfile} />}
           {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} />}
@@ -314,7 +369,7 @@ const App: React.FC = () => {
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => setShowOnboarding(true)} />}
         </div>
         
-        {isSyncing && <div className="fixed top-20 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
+        {isSyncing && isDataLoaded && <div className="fixed top-20 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
         {showRewardModal && pendingReward && !showOnboarding && <DailyRewardModal reward={pendingReward} streak={profile.loginStreak || 1} onClaim={handleClaimReward} briefing={dailyBriefing} isLoadingBriefing={isBriefingLoading} />}
         {showOnboarding && <Onboarding userName={profile.name} onComplete={handleOnboardingComplete} onStepChange={setActiveTab} />}
         {showTimeoutWarning && (

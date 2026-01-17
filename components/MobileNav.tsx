@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, LogOut, Package, ShieldCheck, Menu, X, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Dumbbell, Camera, ScrollText, Settings as SettingsIcon, LogOut, Package, ShieldCheck, Menu, X, ChevronRight, Utensils } from 'lucide-react';
 
 interface MobileNavProps {
   activeTab: string;
@@ -12,9 +12,10 @@ interface MobileNavProps {
 const MobileNav: React.FC<MobileNavProps> = ({ activeTab, setActiveTab, onLogout, isAdmin = false }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // 核心高頻功能 (常駐底部)
+  // 核心高頻功能 (常駐底部) - 增加飲食控制
   const primaryNav = [
     { id: 'dashboard', label: '數據', icon: <LayoutDashboard size={20} /> },
+    { id: 'diet', label: '飲食', icon: <Utensils size={20} /> }, // New
     { id: 'journal', label: '訓練', icon: <Dumbbell size={20} /> },
     { id: 'scan', label: '診斷', icon: <Camera size={20} /> },
   ];

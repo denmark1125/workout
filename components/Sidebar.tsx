@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { FitnessGoal, GoalMetadata, UserProfile } from '../types';
-import { LayoutDashboard as DashboardIcon, Dumbbell as DumbbellIcon, Camera as CameraIcon, ScrollText as ReportIcon, Settings as SettingsIconLucide, ShieldCheck as AdminIcon, LogOut as LogoutIcon, Package as VaultIcon, Target as TargetIcon } from 'lucide-react';
+import { LayoutDashboard as DashboardIcon, Dumbbell as DumbbellIcon, Camera as CameraIcon, ScrollText as ReportIcon, Settings as SettingsIconLucide, ShieldCheck as AdminIcon, LogOut as LogoutIcon, Package as VaultIcon, Target as TargetIcon, Utensils as UtensilsIcon } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -16,6 +16,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, isAdmin, onLogout, hasPendingReward = false, profile }) => {
   const navItems = [
     { id: 'dashboard', label: '健身數據', icon: <DashboardIcon size={18} /> },
+    { id: 'diet', label: '飲食控制', icon: <UtensilsIcon size={18} /> }, // New Diet Tab
     { id: 'journal', label: '訓練日誌', icon: <DumbbellIcon size={18} /> },
     { id: 'scan', label: '體態診斷', icon: <CameraIcon size={18} /> },
     { id: 'report', label: '健身週報', icon: <ReportIcon size={18} /> },

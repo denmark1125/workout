@@ -1,3 +1,4 @@
+
 // Use namespace import to resolve environment-specific module resolution issues with Firebase exports
 import * as firebaseApp from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
@@ -35,9 +36,17 @@ export const syncToCloud = async (collectionName: string, data: any, userId: str
   try {
     const docRef = doc(db, collectionName, userId);
     await setDoc(docRef, { data, updatedAt: new Date().toISOString(), authorizedBy: userId });
+    
+    // 修正：當更新 profile 時，將 name 與 role 一併寫入註冊表，以便 Admin Panel 讀取
     if (collectionName === 'profiles') {
       const registryRef = doc(db, 'system_metadata', 'user_registry');
-      await setDoc(registryRef, { [userId]: { memberId: userId, lastActive: new Date().toISOString(), status: 'ACTIVE' } }, { merge: true });
+      await setDoc(registryRef, { [userId]: { 
+        memberId: userId, 
+        name: data.name, // 新增同步欄位
+        role: data.role, // 新增同步欄位
+        lastActive: new Date().toISOString(), 
+        status: 'ACTIVE' 
+      } }, { merge: true });
     }
   } catch (error) {
     console.error(`[Cloud Error] ${collectionName} 同步失敗:`, error);

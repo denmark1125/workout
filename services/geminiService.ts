@@ -1,12 +1,10 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord } from "../types";
+import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, FitnessGoal, PhysiqueRecord, MacroNutrients, DietaryPreference } from "../types";
 import { getTaiwanDate, getTaiwanWeekId } from "../utils/calculations";
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  // Use process.env.API_KEY exclusively as per the world-class senior frontend engineer guidelines
-  // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
@@ -38,8 +36,6 @@ const checkAccess = (type: 'daily' | 'physique' | 'weekly', profile: UserProfile
       return { allowed: true };
       
     case 'weekly':
-      // 檢查是否為當週，若是新的一週則重置 (邏輯由 App 端狀態更新處理，這裡僅檢查當前值)
-      // 若 profile 紀錄的是舊週次，則視為允許 (因為將會更新為新週次 count 1)
       if (profile.weeklyReportUsage?.weekId === currentWeek) {
         if (profile.weeklyReportUsage.count >= 2) {
           return { allowed: false, reason: "Weekly report limit (2/week) reached" };
@@ -81,7 +77,6 @@ export const testConnection = async (role: string = 'user'): Promise<boolean> =>
   
   try {
     const ai = getAIInstance();
-    // Using ai.models.generateContent to query GenAI with both the model name and prompt
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview", 
       contents: "Ping",
@@ -98,7 +93,6 @@ export const testConnection = async (role: string = 'user'): Promise<boolean> =>
  */
 export const getDavidGreeting = async (profile: UserProfile): Promise<string> => {
   const hour = new Date().getHours();
-  // 修改：優先使用用戶名稱 (User Name)
   const nameToUse = (profile.name && profile.name !== 'User') 
     ? profile.name 
     : '執行者';
@@ -114,24 +108,62 @@ export const getDavidGreeting = async (profile: UserProfile): Promise<string> =>
 };
 
 /**
+ * 食物辨識與營養分析
+ */
+export const analyzeFoodImage = async (base64Image: string): Promise<{ name: string; macros: MacroNutrients } | null> => {
+  try {
+    const ai = getAIInstance();
+    const prompt = `
+      辨識圖中食物。
+      回傳 JSON 格式：
+      {
+        "name": "食物名稱 (繁體中文)",
+        "calories": 總熱量(整數),
+        "protein": 蛋白質克數(整數),
+        "carbs": 碳水化合物克數(整數),
+        "fat": 脂肪克數(整數)
+      }
+      若無法辨識，回傳 null。不要有任何 Markdown 標記，直接回傳 JSON 字串。
+    `;
+    
+    const imagePart = {
+      inlineData: {
+        mimeType: "image/jpeg",
+        data: base64Image.split(',')[1] || base64Image,
+      },
+    };
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: { parts: [imagePart, { text: prompt }] },
+      config: { temperature: 0.1 }
+    });
+
+    const text = response.text?.trim() || "";
+    // 移除可能的 markdown code block
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Food Analysis Failed", error);
+    return null;
+  }
+};
+
+/**
  * 獲取今日訓練反饋 (Daily Feedback)
- * 限制：每日 1 次，有快取
  */
 export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLog): Promise<string> => {
   const today = getTaiwanDate();
   const cacheKey = `matrix_feedback_${profile.memberId}_${today}`;
 
-  // 1. 檢查 LocalStorage 快取
   const cached = localStorage.getItem(cacheKey);
   if (cached) return cached;
 
-  // 2. Gatekeeper 檢查
   const access = checkAccess('daily', profile);
   if (!access.allowed) {
     return "David 教練：今日戰術分析已完成。專注休息，明日再戰。";
   }
 
-  // 3. 準備精簡數據
   const logSummary = `${todayLog.startTime}-${todayLog.endTime} Focus:${todayLog.focus}. Ex:${todayLog.exercises.map(e => `${e.name}:${e.weight}kg`).join(',')}. Note:${todayLog.feedback || 'None'}`;
   
   const prompt = `
@@ -148,9 +180,7 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
       config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
     });
     
-    // Accessing .text property directly (not a method)
     const result = response.text?.trim() || "David 教練：今日表現穩健。";
-    // 寫入快取
     localStorage.setItem(cacheKey, result);
     return result;
 
@@ -164,7 +194,6 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
 
 /**
  * 視覺診斷 (Physique Analysis)
- * 限制：每日 1 次
  */
 export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
   const access = checkAccess('physique', profile);
@@ -195,7 +224,6 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
       contents: { parts: [imagePart, { text: prompt }] },
       config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.7 }
     });
-    // Accessing .text property directly
     return response.text || "David 教練：目前無法解析該體態數據。";
   } catch (error: any) {
     if (error.message?.includes('429')) return "### ⚠️ 系統忙碌\n\nDavid 教練：視覺核心目前滿載。請稍後再試。";
@@ -205,7 +233,6 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
 
 /**
  * 戰略週報 (Weekly Report)
- * 限制：每週 2 次，僅傳送本週數據
  */
 export const generateWeeklyReport = async (
   profile: UserProfile, 
@@ -218,15 +245,17 @@ export const generateWeeklyReport = async (
     return "### 🚫 存取限制\n\nDavid 教練：戰略週報每週僅限生成兩次。過度依賴數據分析而忽略執行是兵家大忌。請下週再來。";
   }
 
-  // 資料修剪：只取最近 7 筆 (假設為一週量) 並精簡格式
   const prunedMetrics = metrics.slice(-7).map(m => `${m.date}:${m.weight}kg/${m.bodyFat}%`).join('\n');
   const prunedLogs = pruneLogs(logs.slice(-7)).map(l => `${l.d}[${l.f}]:${l.e}`).join('\n');
 
+  const dietPrefStr = profile.dietaryPreference ? `飲食偏好：${profile.dietaryPreference}` : '';
+
   const prompt = `
     目標：${GoalMetadata[profile.goal].label}
+    ${dietPrefStr}
     體重體脂：\n${prunedMetrics}
     本週訓練：\n${prunedLogs}
-    任務：生成週報。包含戰術評估、動作優化、飲食建議。
+    任務：生成週報。包含戰術評估、動作優化、飲食建議（請根據飲食偏好調整食物建議，例如素食者多推豆類）。
   `;
 
   try {
@@ -240,10 +269,8 @@ export const generateWeeklyReport = async (
       },
     });
 
-    // Accessing .text property directly
     let outputText = response.text || "David 教練：週報分析中，請稍候。";
     
-    // Extract website URLs from groundingChunks and list them
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     if (sources && sources.length > 0) {
       outputText += "\n\n---\n**戰略參考：**\n";
@@ -270,7 +297,6 @@ export const getDailyBriefing = async (profile: UserProfile, streak: number): Pr
       contents: prompt,
       config: { temperature: 0.9 }
     });
-    // Accessing .text property directly
     return response.text?.trim() || `"${profile.name}，你的堅持是系統最強大的演算法。"`;
   } catch (error) {
     return `"${profile.name}，你的堅持是系統最強大的演算法。"`;

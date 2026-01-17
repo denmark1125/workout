@@ -1,5 +1,5 @@
 
-import { UserProfile, UserMetrics, CalculatedData } from '../types';
+import { UserProfile, UserMetrics, CalculatedData, ActivityLevel, FitnessGoal, DietaryPreference } from '../types';
 
 export interface MatrixStatus {
   label: string;
@@ -41,30 +41,21 @@ export const getTaiwanDate = (): string => {
     month: '2-digit',
     day: '2-digit'
   };
-  // 輸出格式可能因環境而異，統一處理
-  const formatter = new Intl.DateTimeFormat('en-CA', options); // en-CA 輸出 YYYY-MM-DD
+  const formatter = new Intl.DateTimeFormat('en-CA', options); 
   return formatter.format(now);
 };
 
 /**
  * 取得當前台灣週次 ID
- * 格式: YYYY-Www (例如 2025-W08)
- * 定義: 週一為每週第一天
  */
 export const getTaiwanWeekId = (): string => {
   const now = new Date();
-  // 轉換為台灣時間物件
   const taiwanTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
-  
   const date = new Date(taiwanTime.getTime());
   date.setHours(0, 0, 0, 0);
-  
-  // 設定為本週四，以計算 ISO 週次
   date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-  
   const week1 = new Date(date.getFullYear(), 0, 4);
   const weekNumber = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-  
   return `${date.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
 };
 
@@ -76,11 +67,8 @@ export const getBMIStatus = (bmi: number): MatrixStatus => {
 };
 
 export const getFFMIStatus = (ffmi: number, gender: 'M' | 'F' | 'O'): MatrixStatus => {
-  // 女性 FFMI 基準通常比男性低約 3-4 單位
   const offset = gender === 'F' ? 3.5 : 0;
-  
   const adjustedFfmi = ffmi + offset;
-
   if (adjustedFfmi < 18) return { label: '一般體格', color: 'border-gray-200 text-gray-400 bg-gray-50/10' };
   if (adjustedFfmi < 20) return { label: '運動基礎', color: 'border-blue-100 text-blue-400 bg-blue-50/10' };
   if (adjustedFfmi < 22) return { label: '精銳運動員', color: 'border-lime-200 text-lime-500 bg-lime-50/10' };
@@ -101,7 +89,6 @@ export const calculateMatrix = (profile: UserProfile, metric: UserMetrics): Calc
   
   const leanMass = weight * (1 - (bodyFat / 100));
   const ffmiRaw = leanMass / (heightM * heightM);
-  // 修正後的 FFMI 考慮到身高補償
   const ffmi = ffmiRaw + 6.1 * (1.8 - heightM);
   
   const muscleMass = metric.muscleMass || 35;
@@ -126,4 +113,75 @@ export const getRadarData = (profile: UserProfile, metric: UserMetrics, calculat
     { subject: 'FFMI 指標', A: Math.min(100, (calculated.ffmi / (isFemale ? 20 : 25)) * 100), fullMark: 100 },
     { subject: '進化潛力', A: isFatLoss ? 95 : 85, fullMark: 100 },
   ];
+};
+
+/**
+ * 自動計算目標熱量與營養素 (TDEE Method)
+ */
+export const calculateNutritionTargets = (
+  weight: number, 
+  height: number, 
+  age: number, 
+  gender: 'M'|'F'|'O', 
+  activity: ActivityLevel, 
+  goal: FitnessGoal,
+  preference: DietaryPreference
+) => {
+  // 1. Calculate BMR (Mifflin-St Jeor)
+  const s = gender === 'F' ? -161 : 5;
+  const bmr = (10 * weight) + (6.25 * height) - (5 * age) + s;
+
+  // 2. Calculate TDEE
+  const tdee = bmr * activity;
+
+  // 3. Adjust for Goal
+  let targetCalories = tdee;
+  if (goal === FitnessGoal.FAT_LOSS) targetCalories = tdee * 0.8; // 20% deficit
+  if (goal === FitnessGoal.TONING) targetCalories = tdee * 0.9; // 10% deficit
+  if (goal === FitnessGoal.HYPERTROPHY) targetCalories = tdee * 1.1; // 10% surplus
+  if (goal === FitnessGoal.STRENGTH) targetCalories = tdee * 1.05; // 5% surplus
+  // Endurance & Custom ~ maintenance or slight surplus depending on load, keep maintenance default
+  
+  targetCalories = Math.round(targetCalories);
+
+  // 4. Calculate Macros
+  // Protein: High for muscle retention/growth. 
+  // Base: 2g/kg (Standard fitness), adjusted slightly by diet
+  let proteinRatio = 2.0; 
+  if (preference === DietaryPreference.KETOGENIC) proteinRatio = 1.8; // KETO usually moderate protein high fat
+
+  const proteinGrams = Math.round(weight * proteinRatio);
+  const proteinCals = proteinGrams * 4;
+
+  let remainingCals = targetCalories - proteinCals;
+
+  // Fat & Carbs Split
+  let fatRatio = 0.3; // Default 30% of total
+  if (preference === DietaryPreference.KETOGENIC) fatRatio = 0.70; // High fat
+  if (goal === FitnessGoal.FAT_LOSS) fatRatio = 0.35; // Slightly higher fat for satiety
+
+  let fatCals = targetCalories * fatRatio;
+  // If keto, we need to ensure carbs are very low
+  if (preference === DietaryPreference.KETOGENIC) {
+     const carbGrams = 30; // Hard limit
+     const carbCals = carbGrams * 4;
+     remainingCals = targetCalories - proteinCals - carbCals;
+     fatCals = remainingCals;
+  }
+  
+  let fatGrams = Math.round(fatCals / 9);
+  let carbCals = targetCalories - proteinCals - (fatGrams * 9);
+  let carbGrams = Math.round(carbCals / 4);
+
+  // Safety checks for negative values
+  if (carbGrams < 0) carbGrams = 0;
+
+  return {
+    dailyCalorieTarget: targetCalories,
+    macroTargets: {
+      protein: proteinGrams,
+      carbs: carbGrams,
+      fat: fatGrams
+    }
+  };
 };

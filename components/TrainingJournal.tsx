@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { WorkoutLog, WorkoutExercise, UserProfile } from '../types';
+import { WorkoutLog, WorkoutExercise, UserProfile, ExerciseType } from '../types';
 import { getDailyFeedback } from '../services/geminiService';
 import { getTaiwanDate } from '../utils/calculations';
-import { ChevronLeft, ChevronRight, Plus, X, Trash2, Clock, MessageSquare, Zap, Loader2, RotateCcw, History, Save, Edit2, Check, Tag, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, Trash2, Clock, MessageSquare, Zap, Loader2, RotateCcw, History, Save, Edit2, Check, Tag, ChevronUp, ChevronDown, Activity, Dumbbell, Flame } from 'lucide-react';
 
 interface TrainingJournalProps {
   logs: WorkoutLog[];
@@ -31,10 +31,19 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
   const [feedback, setFeedback] = useState('');
 
   // 動作輸入狀態
+  const [exerciseType, setExerciseType] = useState<ExerciseType>('STRENGTH'); // 新增類型切換
   const [exName, setExName] = useState('');
+  
+  // Strength Data
   const [exWeight, setExWeight] = useState('');
   const [exReps, setExReps] = useState('');
   const [exSets, setExSets] = useState(1);
+  
+  // Cardio Data
+  const [exDuration, setExDuration] = useState(''); // minutes
+  const [exDistance, setExDistance] = useState(''); // km
+  const [exIntensity, setExIntensity] = useState<'LOW'|'MED'|'HIGH'>('MED');
+
   const [pendingExercises, setPendingExercises] = useState<WorkoutExercise[]>([]);
   
   // 編輯歷史/暫存狀態
@@ -72,14 +81,24 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
     const counts: Record<string, number> = {};
     logs.forEach(log => {
       log.exercises.forEach(ex => {
+        // Only suggest matching type
+        if (exerciseType === 'CARDIO' && ex.type !== 'CARDIO') return;
+        if (exerciseType === 'STRENGTH' && ex.type === 'CARDIO') return;
         counts[ex.name] = (counts[ex.name] || 0) + 1;
       });
     });
+    
+    // Default suggestions if empty
+    if (Object.keys(counts).length === 0) {
+       if (exerciseType === 'CARDIO') return ['跑步機', '飛輪', '划船機', '橢圓機', '跳繩', '游泳', '爬樓梯'];
+       return ['深蹲', '硬舉', '臥推', '肩推', '引體向上', '划船'];
+    }
+
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(entry => entry[0]);
-  }, [logs]);
+  }, [logs, exerciseType]);
 
   const duration = useMemo(() => {
     const [sh, sm] = startTime.split(':').map(Number);
@@ -114,29 +133,55 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
     setSelectedFocus(selectedFocus.filter(i => i !== f));
   };
 
+  // 簡單的有氧熱量估算 (METs)
+  const calculateCardioCalories = (duration: number, intensity: string) => {
+     let mets = 3;
+     if (intensity === 'LOW') mets = 4; // 快走
+     if (intensity === 'MED') mets = 8; // 慢跑
+     if (intensity === 'HIGH') mets = 11; // 衝刺/HIIT
+     // Formula: Kcal = METs * weight(kg) * time(hr)
+     // Use profile weight or default 70
+     // Assuming accessing weight from outside is hard here, use rough estimate or pass metrics. 
+     // For now, let's use 75kg as base if we can't get metric easily, or simplified formula.
+     // Simplified: Intensity Factor * Duration
+     const factors = { 'LOW': 5, 'MED': 8, 'HIGH': 12 }; // kcal per min approx
+     return Math.round(factors[intensity as keyof typeof factors] * duration);
+  };
+
   const addOrUpdateExercise = () => {
     if (!exName) return;
     
+    let calories = 0;
+    if (exerciseType === 'CARDIO') {
+       calories = calculateCardioCalories(parseInt(exDuration) || 0, exIntensity);
+    } else {
+       // Strength estimated very roughly: 4 kcal per min of active work.
+       // Assume 1 set takes 1.5 min
+       calories = exSets * 1.5 * 5; 
+    }
+
+    const newExData: WorkoutExercise = {
+      id: editingExId || Date.now().toString(),
+      type: exerciseType,
+      name: exName,
+      weight: parseFloat(exWeight) || 0,
+      reps: parseInt(exReps) || 0,
+      sets: exSets,
+      durationMinutes: parseInt(exDuration) || 0,
+      distance: parseFloat(exDistance) || 0,
+      caloriesBurned: calories
+    };
+    
     if (editingExId) {
-      setPendingExercises(prev => prev.map(ex => 
-        ex.id === editingExId 
-          ? { ...ex, name: exName, weight: parseFloat(exWeight) || 0, reps: parseInt(exReps) || 0, sets: exSets }
-          : ex
-      ));
+      setPendingExercises(prev => prev.map(ex => ex.id === editingExId ? newExData : ex));
       setEditingExId(null);
     } else {
-      const newEx: WorkoutExercise = {
-        id: Date.now().toString(),
-        name: exName,
-        weight: parseFloat(exWeight) || 0,
-        reps: parseInt(exReps) || 0,
-        sets: exSets
-      };
-      setPendingExercises([...pendingExercises, newEx]);
+      setPendingExercises([...pendingExercises, newExData]);
     }
-    setExWeight(''); 
-    setExReps(''); 
-    setExSets(1);
+    
+    // Reset Form
+    setExWeight(''); setExReps(''); setExSets(1);
+    setExDuration(''); setExDistance(''); setExIntensity('MED');
   };
 
   const handleEditHistory = (log: WorkoutLog) => {
@@ -147,10 +192,28 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
     setFeedback(log.feedback || '');
     const focuses = (log.focus || '').split(', ').filter(f => f.trim() !== '');
     setSelectedFocus(focuses);
-    // 將不在預設清單中的標籤放入自定義清單
     const customs = focuses.filter(f => !focusPresets.includes(f));
     setUserCustomFocuses(Array.from(new Set([...userCustomFocuses, ...customs])));
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleEditExercise = (ex: WorkoutExercise) => {
+     setEditingExId(ex.id);
+     setExerciseType(ex.type || 'STRENGTH');
+     setExName(ex.name);
+     
+     if (ex.type === 'CARDIO') {
+        setExDuration(ex.durationMinutes?.toString() || '');
+        setExDistance(ex.distance?.toString() || '');
+        // Infer intensity if not saved? For now simple logic.
+        setExIntensity('MED'); 
+     } else {
+        setExWeight(ex.weight.toString());
+        setExReps(ex.reps.toString());
+        setExSets(ex.sets);
+     }
+     
+     document.getElementById('exercise-input-zone')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleCommit = async () => {
@@ -161,6 +224,8 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
     
     setIsAiProcessing(true);
     const logFocus = selectedFocus.filter(f => f.trim() !== '').join(', ');
+    const totalBurn = pendingExercises.reduce((sum, ex) => sum + (ex.caloriesBurned || 0), 0);
+    
     const newLog: WorkoutLog = {
       id: isEditingHistory || Date.now().toString(),
       date: selectedDate,
@@ -168,7 +233,8 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
       focus: logFocus,
       feedback: feedback,
       durationMinutes: duration,
-      exercises: pendingExercises
+      exercises: pendingExercises,
+      totalCaloriesBurned: totalBurn
     };
 
     if (isEditingHistory && onUpdateLog) {
@@ -204,6 +270,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
     setExWeight('');
     setExReps('');
     setExSets(1);
+    setExDuration(''); setExDistance('');
   };
 
   const todayLogs = logs.filter(l => l.date === selectedDate);
@@ -258,7 +325,10 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                     </div>
                     <div className="flex justify-between items-end">
                        <p className="text-[8px] font-mono text-gray-400 uppercase tracking-widest">{log.startTime}-{log.endTime}</p>
-                       <p className="text-[9px] font-black text-gray-300">{log.exercises.length} EX</p>
+                       <div className="text-right">
+                         <p className="text-[9px] font-black text-gray-300">{log.exercises.length} EX</p>
+                         {log.totalCaloriesBurned ? <p className="text-[8px] font-bold text-lime-600">-{log.totalCaloriesBurned} kcal</p> : null}
+                       </div>
                     </div>
                  </div>
                ))
@@ -293,7 +363,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
             <div className="space-y-8">
-              {/* 時間區塊 - 極致對稱修正 */}
+              {/* 時間區塊 */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1 min-w-0">
                   <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1 block">開始時間 START</label>
@@ -321,7 +391,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                 </div>
               </div>
 
-              {/* 訓練焦點 - 整合式自定義功能 */}
+              {/* 訓練焦點 */}
               <div className="space-y-4">
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">訓練焦點 TARGET (可複選)</label>
                 <div className="flex flex-wrap gap-2">
@@ -331,7 +401,6 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                      </button>
                    ))}
                    
-                   {/* 使用者自定義標籤顯示 */}
                    {userCustomFocuses.map(f => (
                      <div key={f} className="relative group">
                         <button onClick={() => toggleFocus(f)} className={`px-3 py-2 text-[10px] font-black transition-all border ${selectedFocus.includes(f) ? 'bg-[#bef264] text-black border-black' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
@@ -343,7 +412,6 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                      </div>
                    ))}
 
-                   {/* 新增自定義焦點輸入框 */}
                    <div className="flex border border-dashed border-gray-200 focus-within:border-black transition-all">
                       <input 
                         type="text"
@@ -370,13 +438,37 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                     {pendingExercises.length > 0 && !editingExId && (
                       <button onClick={() => { 
                         const last = pendingExercises[pendingExercises.length - 1]; 
-                        setExName(last.name); setExWeight(last.weight.toString()); setExReps(last.reps.toString()); setExSets(last.sets);
+                        setExerciseType(last.type || 'STRENGTH');
+                        setExName(last.name); 
+                        if(last.type === 'CARDIO') {
+                            setExDuration(last.durationMinutes?.toString() || '');
+                            setExDistance(last.distance?.toString() || '');
+                        } else {
+                            setExWeight(last.weight.toString()); setExReps(last.reps.toString()); setExSets(last.sets);
+                        }
                       }} className="text-[9px] font-black text-gray-400 uppercase hover:text-black flex items-center gap-1">
                         <RotateCcw size={10} /> 複製上一組
                       </button>
                     )}
                  </div>
 
+                 {/* Type Toggle */}
+                 <div className="flex bg-white border border-gray-200 p-1 rounded-sm">
+                    <button 
+                      onClick={() => setExerciseType('STRENGTH')} 
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'STRENGTH' ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}
+                    >
+                      <Dumbbell size={14} /> 重量訓練 STRENGTH
+                    </button>
+                    <button 
+                      onClick={() => setExerciseType('CARDIO')} 
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'CARDIO' ? 'bg-black text-[#bef264] shadow-md' : 'text-gray-400'}`}
+                    >
+                      <Activity size={14} /> 有氧代謝 CARDIO
+                    </button>
+                 </div>
+
+                 {/* Suggestions */}
                  <div className="flex flex-wrap gap-2 pb-1 overflow-x-auto no-scrollbar">
                     {exerciseSuggestions.map(tag => (
                       <button key={tag} onClick={() => setExName(tag)} className={`px-2 py-1 text-[9px] font-bold border transition-all whitespace-nowrap ${exName === tag ? 'bg-black text-white border-black' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-300'}`}>
@@ -387,40 +479,76 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
 
                  <div className="space-y-6">
                     <input 
-                      placeholder="輸入動作名稱 (如：槓鈴臥推)" 
+                      placeholder={exerciseType === 'STRENGTH' ? "輸入動作名稱 (如：槓鈴臥推)" : "輸入項目 (如：跑步機 10K)"}
                       value={exName} 
                       onChange={e => setExName(e.target.value)} 
                       className="w-full bg-white px-5 py-5 text-lg font-black shadow-sm outline-none border border-transparent focus:border-black" 
                     />
                     
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1">
-                         <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">重量 WEIGHT (KG)</label>
-                         <input type="number" step="0.5" placeholder="0" value={exWeight} onChange={e => setExWeight(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
-                       </div>
-                       <div className="space-y-1">
-                         <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">次數 REPS</label>
-                         <input type="number" placeholder="0" value={exReps} onChange={e => setExReps(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
-                       </div>
-                    </div>
+                    {exerciseType === 'STRENGTH' ? (
+                       <>
+                         <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-1">
+                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">重量 WEIGHT (KG)</label>
+                             <input type="number" step="0.5" placeholder="0" value={exWeight} onChange={e => setExWeight(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
+                           </div>
+                           <div className="space-y-1">
+                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">次數 REPS</label>
+                             <input type="number" placeholder="0" value={exReps} onChange={e => setExReps(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
+                           </div>
+                         </div>
 
-                    <div className="space-y-3">
-                       <div className="flex justify-between items-center px-1">
-                         <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest">組數 SETS (滑動選擇)</label>
-                         <span className="text-xl font-black font-mono text-black">{exSets} <span className="text-[10px] uppercase text-gray-400">組</span></span>
-                       </div>
-                       <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
-                          {[1,2,3,4,5,6,7,8,9,10].map(s => (
-                            <button key={s} onClick={() => setExSets(s)} className={`flex-shrink-0 w-10 h-10 text-xs font-black transition-all border ${exSets === s ? 'bg-black text-[#bef264] border-black scale-105' : 'bg-white text-gray-300 border-gray-100 hover:border-gray-200'}`}>
-                              {s}
-                            </button>
-                          ))}
-                       </div>
-                    </div>
+                         <div className="space-y-3">
+                           <div className="flex justify-between items-center px-1">
+                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest">組數 SETS (滑動選擇)</label>
+                             <span className="text-xl font-black font-mono text-black">{exSets} <span className="text-[10px] uppercase text-gray-400">組</span></span>
+                           </div>
+                           <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
+                              {[1,2,3,4,5,6,7,8,9,10].map(s => (
+                                <button key={s} onClick={() => setExSets(s)} className={`flex-shrink-0 w-10 h-10 text-xs font-black transition-all border ${exSets === s ? 'bg-black text-[#bef264] border-black scale-105' : 'bg-white text-gray-300 border-gray-100 hover:border-gray-200'}`}>
+                                  {s}
+                                </button>
+                              ))}
+                           </div>
+                         </div>
+                       </>
+                    ) : (
+                       // Cardio Inputs
+                       <>
+                          <div className="grid grid-cols-2 gap-4">
+                             <div className="space-y-1">
+                               <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">時間 DURATION (MIN)</label>
+                               <input type="number" placeholder="0" value={exDuration} onChange={e => setExDuration(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
+                             </div>
+                             <div className="space-y-1">
+                               <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">距離 DISTANCE (KM)</label>
+                               <input type="number" step="0.1" placeholder="0" value={exDistance} onChange={e => setExDistance(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
+                             </div>
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block mb-2">強度 INTENSITY</label>
+                             <div className="flex gap-2">
+                                {(['LOW', 'MED', 'HIGH'] as const).map(level => (
+                                   <button 
+                                     key={level} 
+                                     onClick={() => setExIntensity(level)}
+                                     className={`flex-1 py-3 text-[10px] font-black border uppercase transition-all ${exIntensity === level ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-200'}`}
+                                   >
+                                     {level}
+                                   </button>
+                                ))}
+                             </div>
+                          </div>
+                          <div className="flex items-center justify-center gap-2 p-3 bg-gray-100/50 text-gray-400">
+                             <Flame size={12} className="text-orange-400" />
+                             <span className="text-[10px] font-black uppercase">預估消耗: ~{Math.round((parseInt(exDuration)||0) * (exIntensity==='LOW'?5:exIntensity==='MED'?8:12))} kcal</span>
+                          </div>
+                       </>
+                    )}
 
                     <div className="flex gap-2 pt-2">
                        {editingExId && (
-                         <button onClick={() => { setEditingExId(null); setExName(''); setExWeight(''); setExReps(''); setExSets(1); }} className="flex-1 bg-gray-100 text-gray-400 py-4 text-[10px] font-black uppercase tracking-widest">取消</button>
+                         <button onClick={() => { setEditingExId(null); setExName(''); setExWeight(''); setExReps(''); setExSets(1); setExDuration(''); setExDistance(''); }} className="flex-1 bg-gray-100 text-gray-400 py-4 text-[10px] font-black uppercase tracking-widest">取消</button>
                        )}
                        <button onClick={addOrUpdateExercise} disabled={!exName} className={`flex-[2] py-5 text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${editingExId ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-black text-[#bef264] hover:bg-lime-400 hover:text-black shadow-lg'} disabled:opacity-20`}>
                           {editingExId ? <><Check size={16}/> 更新數據</> : <><Plus size={16}/> 暫存此組動作</>}
@@ -447,14 +575,27 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                     ) : (
                       [...pendingExercises].reverse().map(ex => (
                         <div key={ex.id} className={`group flex items-center justify-between bg-white p-4 border transition-all ${editingExId === ex.id ? 'border-blue-500 ring-2 ring-blue-100' : 'border-gray-100 hover:border-gray-300'}`}>
-                           <div className="flex-1 cursor-pointer" onClick={() => { setEditingExId(ex.id); setExName(ex.name); setExWeight(ex.weight.toString()); setExReps(ex.reps.toString()); setExSets(ex.sets); document.getElementById('exercise-input-zone')?.scrollIntoView({ behavior: 'smooth' }); }}>
-                              <p className="text-xs font-black uppercase text-gray-800">{ex.name}</p>
+                           <div className="flex-1 cursor-pointer" onClick={() => handleEditExercise(ex)}>
+                              <div className="flex items-center gap-2 mb-1">
+                                 {ex.type === 'CARDIO' && <span className="text-[8px] font-black bg-orange-100 text-orange-500 px-1 rounded-sm">CARDIO</span>}
+                                 <p className="text-xs font-black uppercase text-gray-800">{ex.name}</p>
+                              </div>
                               <div className="flex items-center gap-3 mt-1">
-                                <span className="text-xl font-mono font-black text-black">{ex.weight}<span className="text-[9px] text-gray-400 ml-1 uppercase">kg</span></span>
-                                <span className="text-xs text-gray-300">/</span>
-                                <span className="text-xl font-mono font-black text-black">{ex.reps}<span className="text-[9px] text-gray-400 ml-1 uppercase">次</span></span>
-                                <span className="text-xs text-gray-300">/</span>
-                                <span className="text-xl font-mono font-black text-lime-600">{ex.sets}<span className="text-[9px] text-gray-400 ml-1 uppercase">組</span></span>
+                                {ex.type === 'CARDIO' ? (
+                                   <>
+                                     <span className="text-xl font-mono font-black text-black">{ex.durationMinutes}<span className="text-[9px] text-gray-400 ml-1 uppercase">min</span></span>
+                                     <span className="text-xs text-gray-300">/</span>
+                                     <span className="text-xl font-mono font-black text-lime-600">{ex.distance || 0}<span className="text-[9px] text-gray-400 ml-1 uppercase">km</span></span>
+                                   </>
+                                ) : (
+                                   <>
+                                     <span className="text-xl font-mono font-black text-black">{ex.weight}<span className="text-[9px] text-gray-400 ml-1 uppercase">kg</span></span>
+                                     <span className="text-xs text-gray-300">/</span>
+                                     <span className="text-xl font-mono font-black text-black">{ex.reps}<span className="text-[9px] text-gray-400 ml-1 uppercase">次</span></span>
+                                     <span className="text-xs text-gray-300">/</span>
+                                     <span className="text-xl font-mono font-black text-lime-600">{ex.sets}<span className="text-[9px] text-gray-400 ml-1 uppercase">組</span></span>
+                                   </>
+                                )}
                               </div>
                            </div>
                            <div className="flex items-center gap-1 opacity-20 group-hover:opacity-100 transition-opacity">

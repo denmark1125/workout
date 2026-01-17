@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
-  const [users, setUsers] = useState<any>({});
+  const [users, setUsers] = useState<any>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -63,8 +63,21 @@ const AdminPanel: React.FC = () => {
     if (editPass.trim()) updated.password = editPass.trim();
     
     await syncToCloud('profiles', updated, uid);
+
+    // 修正：手動更新本地 state，避免重新 loadData 造成畫面閃爍或跳動
+    setUsers((prev: any) => ({
+      ...prev,
+      [uid]: {
+        ...prev[uid],
+        memberId: uid,
+        name: updated.name,
+        role: updated.role,
+        lastActive: prev[uid]?.lastActive || new Date().toISOString()
+      }
+    }));
+    
     setEditingId(null);
-    loadData();
+    // 移除 loadData() 以保持 UI 穩定
   };
 
   const handleAddMember = async () => {
@@ -85,9 +98,12 @@ const AdminPanel: React.FC = () => {
     loadData();
   };
 
-  const filteredUsers = Object.values(users).filter((u: any) => 
-    u.memberId.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // 修正：加入 .sort() 確保列表順序固定，不會因狀態更新而亂跑
+  const filteredUsers = Object.values(users)
+    .filter((u: any) => 
+      u.memberId.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a: any, b: any) => a.memberId.localeCompare(b.memberId));
 
   return (
     <div className="space-y-12 max-w-7xl mx-auto pb-40 px-4">
@@ -138,9 +154,6 @@ const AdminPanel: React.FC = () => {
               {filteredUsers.map((u: any) => {
                 const isEditing = editingId === u.memberId;
                 const isRoot = u.memberId === 'admin_roots';
-                // 這裡 u 可能只有部分資料，詳細資料需透過 fetch 取得，
-                // 但列表顯示時我們依賴 u (來自 user_registry) 
-                // 若正在編輯，狀態依賴 editingRole state
                 
                 return (
                   <tr key={u.memberId} className={`transition-all ${isEditing ? 'bg-gray-50' : 'hover:bg-[#fcfcfc]'}`}>
@@ -172,9 +185,9 @@ const AdminPanel: React.FC = () => {
                           <option value="admin">ADMIN (管理)</option>
                         </select>
                       ) : (
-                        <div className={`inline-flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest border ${isRoot ? 'border-black bg-black text-[#bef264]' : 'border-gray-100 bg-white text-gray-400'}`}>
-                          {isRoot ? <Terminal size={10} /> : <UserCircle size={10} />}
-                          {isRoot ? 'System Root' : 'Member'}
+                        <div className={`inline-flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest border ${u.role === 'admin' || isRoot ? 'border-black bg-black text-[#bef264]' : 'border-gray-100 bg-white text-gray-400'}`}>
+                          {(u.role === 'admin' || isRoot) ? <Terminal size={10} /> : <UserCircle size={10} />}
+                          {(u.role === 'admin' || isRoot) ? 'System Root' : 'Member'}
                         </div>
                       )}
                     </td>
