@@ -6,17 +6,16 @@ import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } fro
 // Destructure from the namespace to bypass potential missing type exports in certain environments
 const { initializeApp, getApps, getApp } = firebaseApp as any;
 
-const env = (import.meta as any).env || {};
-
-// 1. 修正環境變數讀取方式 (符合 Vite 規範)
+// 1. 修正環境變數讀取方式：Vite 專案必須使用 import.meta.env
+// 2. 變數名稱依照您的指示修正
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API, || "AIzaSyAdr5J_-sf3Q486Wzmri3gYdOJLC-pMZEE",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, || "workout-app-20752.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID, || "workout-app-20752",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, || "workout-app-20752.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, || "649579159803",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID, || "1:649579159803:web:886b8bb1e56a0c2dda505e",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-GXX10CEYPK"
+  apiKey: import.meta.env.VITE_FIREBASE_API,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Use any for types to resolve environment-specific module resolution issues with Firebase exports
@@ -26,8 +25,14 @@ let db: any;
 // Initialize Firebase modularly
 try {
   const apps = getApps();
-  app = apps.length === 0 ? initializeApp(firebaseConfig) : getApp();
-  db = getFirestore(app);
+  // 檢查 apiKey 是否存在，避免空值導致初始化錯誤
+  if (firebaseConfig.apiKey) {
+    app = apps.length === 0 ? initializeApp(firebaseConfig) : getApp();
+    db = getFirestore(app);
+    console.log("Firebase initialized successfully");
+  } else {
+    console.warn("Firebase config missing (apiKey). Data will be stored locally.");
+  }
 } catch (e) {
   console.error("Firebase Initialization Failed", e);
 }
@@ -65,7 +70,8 @@ export const syncToCloud = async (collectionName: string, data: any, userId: str
 
   // --- 2. 雲端同步 (Cloud Sync) ---
   if (!db) {
-    console.warn("Firestore 未連線，數據已安全保存在本地。");
+    // 雖然沒連線，但我們已經存了本地，所以不報錯，僅警告
+    // console.warn("Firestore 未連線，數據已安全保存在本地。");
     return;
   }
 

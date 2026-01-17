@@ -580,8 +580,20 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
       </div>
 
       {showCoachFeedback && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none px-6 bg-black/40 backdrop-blur-md">
-           <div className="bg-black text-[#bef264] p-8 border-4 border-[#bef264] shadow-[0_0_100px_rgba(190,242,100,0.5)] animate-in zoom-in duration-300 max-w-lg">
+        <div 
+          onClick={() => setShowCoachFeedback(false)} 
+          className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/40 backdrop-blur-md cursor-pointer"
+        >
+           <div 
+             onClick={(e) => e.stopPropagation()} 
+             className="bg-black text-[#bef264] p-8 border-4 border-[#bef264] shadow-[0_0_100px_rgba(190,242,100,0.5)] animate-in zoom-in duration-300 max-w-lg relative"
+           >
+              <button 
+                onClick={() => setShowCoachFeedback(false)} 
+                className="absolute top-2 right-2 p-2 text-[#bef264]/50 hover:text-[#bef264]"
+              >
+                <X size={20} />
+              </button>
               <div className="flex items-center gap-4 mb-4">
                  <Zap size={28} className="fill-current animate-pulse" />
                  <p className="text-[12px] font-black uppercase tracking-[0.4em]">System Notification</p>
