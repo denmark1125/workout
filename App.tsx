@@ -12,18 +12,18 @@ import AdminPanel from './components/AdminPanel';
 import RewardVault from './components/RewardVault'; 
 import DailyRewardModal from './components/DailyRewardModal';
 import Onboarding from './components/Onboarding'; 
-import NutritionDeck from './components/NutritionDeck'; // New Component
+import NutritionDeck from './components/NutritionDeck'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
 import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; 
 import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
 import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
-import { Loader2, AlertTriangle, LogOut, Terminal, Cloud, CloudOff } from 'lucide-react';
+import { Loader2, AlertTriangle, LogOut, Terminal, Cloud, CloudOff, Share, ArrowUpSquare } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isDataLoaded, setIsDataLoaded] = useState(false); // CRITICAL: 資料載入保護鎖
+  const [isDataLoaded, setIsDataLoaded] = useState(false); 
   const [isAdmin, setIsAdmin] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
   
@@ -31,13 +31,16 @@ const App: React.FC = () => {
   const [pendingReward, setPendingReward] = useState<any>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTimeoutWarning, setShowTimeoutWarning] = useState<string | null>(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
   
   const [davidGreeting, setDavidGreeting] = useState<string>("");
   const [isGreetingLoading, setIsGreetingLoading] = useState(false);
-
+  
+  // Ref to prevent double-firing in Strict Mode
+  const fetchingGreetingRef = useRef(false);
   const timeoutRef = useRef<any>(null);
 
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
@@ -70,7 +73,7 @@ const App: React.FC = () => {
   const [metrics, setMetrics] = useState<UserMetrics[]>([]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [physiqueRecords, setPhysiqueRecords] = useState<PhysiqueRecord[]>([]);
-  const [dietLogs, setDietLogs] = useState<DietLog[]>([]); // New State
+  const [dietLogs, setDietLogs] = useState<DietLog[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -108,15 +111,37 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentMemberId, profile.role]);
 
+  // David Greeting with Debounce Ref
   useEffect(() => {
-    if (isAuthenticated) {
-      if (!davidGreeting) setIsGreetingLoading(true);
+    if (isAuthenticated && !davidGreeting && !fetchingGreetingRef.current) {
+      fetchingGreetingRef.current = true;
+      setIsGreetingLoading(true);
       getDavidGreeting(profile)
         .then(msg => setDavidGreeting(msg))
         .catch(() => setDavidGreeting(`David 教練：${profile.name}，系統已就緒。`))
-        .finally(() => setIsGreetingLoading(false));
+        .finally(() => {
+           setIsGreetingLoading(false);
+           fetchingGreetingRef.current = false;
+        });
     }
   }, [isAuthenticated, profile.name]);
+
+  // Check for PWA Installation (Mobile Web only)
+  useEffect(() => {
+    if (isAuthenticated) {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      // Simple check: iOS users who are not in standalone mode
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      
+      if (isIOS && !isStandalone) {
+         // Show only once per session
+         if (!sessionStorage.getItem('matrix_install_prompt_seen')) {
+            setShowInstallPrompt(true);
+            sessionStorage.setItem('matrix_install_prompt_seen', 'true');
+         }
+      }
+    }
+  }, [isAuthenticated]);
 
   // 1. 下載資料 (Data Fetching)
   useEffect(() => {
@@ -129,7 +154,7 @@ const App: React.FC = () => {
           fetchFromCloud('metrics', currentMemberId),
           fetchFromCloud('logs', currentMemberId),
           fetchFromCloud('physique', currentMemberId),
-          fetchFromCloud('diet', currentMemberId) // Fetch Diet
+          fetchFromCloud('diet', currentMemberId)
         ]);
         
         if (p) {
@@ -156,6 +181,7 @@ const App: React.FC = () => {
              setShowRewardModal(true);
 
              setIsBriefingLoading(true);
+             // Note: getDailyBriefing doesn't use the ref because it's triggered by a specific condition (modal open)
              getDailyBriefing(updatedProfile, updatedProfile.loginStreak || 1)
                .then(briefing => setDailyBriefing(briefing))
                .finally(() => setIsBriefingLoading(false));
@@ -172,13 +198,11 @@ const App: React.FC = () => {
             }
             updatedProfile.lastLoginDate = todayStr;
             
-            // 立即同步登入日期，不依賴下面的自動同步 useEffect
             syncToCloud('profiles', updatedProfile, currentMemberId);
           }
           setProfile(updatedProfile);
         }
         
-        // 只有隱私允許時才載入雲端數據
         if (m) setMetrics(m);
         if (l) setLogs(l);
         if (ph) setPhysiqueRecords(ph);
@@ -194,30 +218,23 @@ const App: React.FC = () => {
     initializeCloudData();
   }, [isAuthenticated, currentMemberId]);
 
-  // 2. 自動上傳 (Auto-Sync) - 嚴格保護
+  // 2. 自動上傳 (Auto-Sync)
   useEffect(() => {
     if (!isDataLoaded || !isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
     
     const timer = setTimeout(() => {
-      // 1. 同步設定檔
       syncToCloud('profiles', profile, currentMemberId);
 
-      // 2. 判斷隱私決定是否上傳生理數據
       if (profile.privacySettings?.syncMetrics) {
         syncToCloud('metrics', metrics, currentMemberId);
       }
       
-      // 3. 訓練日誌始終同步
       syncToCloud('logs', logs, currentMemberId);
-
-      // 4. 飲食日誌始終同步
       syncToCloud('diet', dietLogs, currentMemberId);
       
-      // 5. 判斷隱私決定是否上傳照片
       if (profile.privacySettings?.syncPhysiqueImages) {
         syncToCloud('physique', physiqueRecords, currentMemberId);
       } else {
-        // 如果關閉同步，僅同步不含圖片的分析文字
         const textOnlyRecords = physiqueRecords.map(r => ({ ...r, image: "LOCAL_ONLY_HIDDEN" }));
         syncToCloud('physique', textOnlyRecords, currentMemberId);
       }
@@ -305,6 +322,7 @@ const App: React.FC = () => {
     setDietLogs([]);
     setPhysiqueRecords([]);
     setActiveTab('dashboard');
+    setDavidGreeting("");
     if (isAuto) alert("系統偵測到您已閒置超過3小時，已自動登出。");
   };
 
@@ -372,6 +390,8 @@ const App: React.FC = () => {
         {isSyncing && isDataLoaded && <div className="fixed top-20 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
         {showRewardModal && pendingReward && !showOnboarding && <DailyRewardModal reward={pendingReward} streak={profile.loginStreak || 1} onClaim={handleClaimReward} briefing={dailyBriefing} isLoadingBriefing={isBriefingLoading} />}
         {showOnboarding && <Onboarding userName={profile.name} onComplete={handleOnboardingComplete} onStepChange={setActiveTab} />}
+        
+        {/* Timeout Warning Modal */}
         {showTimeoutWarning && (
           <div className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
             <div className="bg-white p-10 max-w-md w-full border-4 border-yellow-400 shadow-2xl text-center space-y-8 animate-in zoom-in duration-300">
@@ -384,6 +404,41 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Install Prompt Overlay (Mobile) */}
+        {showInstallPrompt && (
+           <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-md flex flex-col justify-end pb-12 animate-in fade-in duration-500">
+              <div className="bg-white p-8 rounded-t-3xl border-t-8 border-[#bef264] relative space-y-6">
+                 <button onClick={() => setShowInstallPrompt(false)} className="absolute top-4 right-4 text-gray-300 hover:text-black"><div className="p-2"><CloudOff size={20}/></div></button>
+                 <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-black flex items-center justify-center shadow-xl">
+                       <span className="text-[#bef264] font-black italic text-4xl pr-1">M</span>
+                    </div>
+                    <div>
+                       <h3 className="text-xl font-black uppercase tracking-tighter">THE MATRIX SYSTEM</h3>
+                       <p className="text-[10px] font-mono text-gray-400 font-bold tracking-widest">PWA INSTALLATION REQUIRED</p>
+                    </div>
+                 </div>
+                 <p className="text-sm font-bold text-gray-700 leading-relaxed">
+                    執行者，為了確保系統通訊穩定與全螢幕戰術視野，請將 The Matrix 加入主畫面。
+                 </p>
+                 <div className="flex items-center gap-4 text-xs font-bold text-gray-500 bg-gray-50 p-4 rounded-lg">
+                    <span>1. 點擊瀏覽器下方的</span>
+                    <Share size={16} className="text-blue-500" />
+                    <span>分享按鈕</span>
+                 </div>
+                 <div className="flex items-center gap-4 text-xs font-bold text-gray-500 bg-gray-50 p-4 rounded-lg">
+                    <span>2. 選擇</span>
+                    <ArrowUpSquare size={16} className="text-black" />
+                    <span>加入主畫面</span>
+                 </div>
+                 <button onClick={() => setShowInstallPrompt(false)} className="w-full bg-black text-[#bef264] py-4 font-black uppercase tracking-widest text-xs hover:bg-[#bef264] hover:text-black transition-all">
+                    收到，暫時忽略
+                 </button>
+              </div>
+           </div>
+        )}
+
       </main>
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => handleLogout()} isAdmin={isAdmin} />
     </div>

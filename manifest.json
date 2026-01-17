@@ -4,8 +4,8 @@
   "name": "The Matrix - AI Fitness Strategist",
   "icons": [
     {
-      "src": "/logo.svg",
-      "type": "image/svg+xml",
+      "src": "/logo-matrix.png",
+      "type": "image/png",
       "sizes": "192x192 512x512"
     }
   ],

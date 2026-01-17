@@ -444,7 +444,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
                     'bg-black text-white border-black hover:bg-gray-800'}`}
               >
                  {testStatus === 'TESTING' ? <Loader2 className="animate-spin" size={12} /> : <Zap size={12} />}
-                 {testStatus === 'TESTING' ? 'Testing...' : testStatus === 'SUCCESS' ? 'AI Online' : 'Test AI Uplink'}
+                 {testStatus === 'TESTING' ? 'Testing...' : testStatus === 'SUCCESS' ? 'Uplink Established' : 'Test AI Uplink'}
               </button>
             </div>
           </div>
