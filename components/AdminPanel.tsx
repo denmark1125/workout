@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { getAllUsers, getAllAuthLogs, purgeUser, syncToCloud, fetchFromCloud } from '../services/dbService';
 import { UserProfile, FitnessGoal } from '../types';
 import { 
@@ -15,10 +15,11 @@ const AdminPanel: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   
+  // Editing States
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPass, setEditPass] = useState('');
-  const [editRole, setEditRole] = useState<'user' | 'admin'>('user'); // Added role state
+  const [editRole, setEditRole] = useState<'user' | 'admin'>('user');
 
   const [newMember, setNewMember] = useState({ id: '', name: '', password: '', gender: 'M' as 'M'|'F' });
 
@@ -41,11 +42,29 @@ const AdminPanel: React.FC = () => {
   };
 
   const startEdit = async (uid: string) => {
-    const profile = await fetchFromCloud('profiles', uid);
+    const currentLocal = users[uid];
     setEditingId(uid);
-    setEditName(profile?.name || uid);
-    setEditPass(''); // Don't show existing password for security, only if changing
-    setEditRole(profile?.role || 'user'); // Load current role
+    setEditName(currentLocal?.name || uid);
+    setEditPass(''); 
+    setEditRole(currentLocal?.role || 'user');
+    
+    // Background fetch to ensure data is fresh, but don't force update if editing
+    const profile = await fetchFromCloud('profiles', uid);
+    if (profile) {
+       if (editingId === uid) {
+          // Only update if we are still editing the same user
+          // Don't overwrite if user has already typed something else? 
+          // For simplicity, we trust local state once editing starts to prevent jumps.
+          // setEditRole(profile.role || 'user');
+          // setEditName(profile.name || uid);
+       }
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName('');
+    setEditPass('');
   };
 
   const handleUpdate = async (uid: string) => {
@@ -64,7 +83,7 @@ const AdminPanel: React.FC = () => {
     
     await syncToCloud('profiles', updated, uid);
 
-    // 修正：手動更新本地 state，避免重新 loadData 造成畫面閃爍或跳動
+    // Optimistic Update: Update local state to reflect changes immediately
     setUsers((prev: any) => ({
       ...prev,
       [uid]: {
@@ -72,12 +91,10 @@ const AdminPanel: React.FC = () => {
         memberId: uid,
         name: updated.name,
         role: updated.role,
-        lastActive: prev[uid]?.lastActive || new Date().toISOString()
       }
     }));
     
     setEditingId(null);
-    // 移除 loadData() 以保持 UI 穩定
   };
 
   const handleAddMember = async () => {
@@ -98,12 +115,14 @@ const AdminPanel: React.FC = () => {
     loadData();
   };
 
-  // 修正：加入 .sort() 確保列表順序固定，不會因狀態更新而亂跑
-  const filteredUsers = Object.values(users)
-    .filter((u: any) => 
-      u.memberId.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a: any, b: any) => a.memberId.localeCompare(b.memberId));
+  // Memoize filtered list to prevent re-sorts during editing
+  const filteredUsers = useMemo(() => {
+    return Object.values(users)
+      .filter((u: any) => 
+        u.memberId.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .sort((a: any, b: any) => a.memberId.localeCompare(b.memberId));
+  }, [users, searchTerm]);
 
   return (
     <div className="space-y-12 max-w-7xl mx-auto pb-40 px-4">
@@ -156,7 +175,7 @@ const AdminPanel: React.FC = () => {
                 const isRoot = u.memberId === 'admin_roots';
                 
                 return (
-                  <tr key={u.memberId} className={`transition-all ${isEditing ? 'bg-gray-50' : 'hover:bg-[#fcfcfc]'}`}>
+                  <tr key={u.memberId} className={`transition-all ${isEditing ? 'bg-gray-50 shadow-inner' : 'hover:bg-[#fcfcfc]'}`}>
                     <td className="py-8 px-10">
                       <div className="flex items-center gap-6">
                         <div className={`w-12 h-12 flex items-center justify-center font-black text-[10px] border ${isRoot ? 'bg-black text-[#bef264]' : 'bg-gray-50 text-gray-400'}`}>
@@ -164,9 +183,13 @@ const AdminPanel: React.FC = () => {
                         </div>
                         <div className="space-y-1">
                           {isEditing ? (
-                            <input value={editName} onChange={e => setEditName(e.target.value)} className="bg-white border-b-2 border-black px-0 py-1 text-lg font-black w-40 outline-none" />
+                            <input 
+                              value={editName} 
+                              onChange={e => setEditName(e.target.value)} 
+                              className="bg-white border-b-2 border-black px-0 py-1 text-lg font-black w-40 outline-none" 
+                            />
                           ) : (
-                            <p className="font-black text-black text-lg tracking-tighter uppercase">{isRoot ? (editName || '超級管理員') : (u.name || u.memberId)}</p>
+                            <p className="font-black text-black text-lg tracking-tighter uppercase">{isRoot ? (u.name || '超級管理員') : (u.name || u.memberId)}</p>
                           )}
                           <p className="text-[9px] font-mono text-gray-300 uppercase tracking-widest">@{u.memberId}</p>
                         </div>
@@ -194,9 +217,9 @@ const AdminPanel: React.FC = () => {
 
                     <td className="py-8 px-10">
                       {isEditing ? (
-                        <div className="flex items-center gap-3 bg-white border px-4 py-2">
+                        <div className="flex items-center gap-3 bg-white border px-4 py-2 w-48">
                           <Key size={12} className="text-gray-300" />
-                          <input type="text" value={editPass} onChange={e => setEditPass(e.target.value)} className="text-[10px] font-black w-32 outline-none" placeholder="輸入新密碼..." />
+                          <input type="text" value={editPass} onChange={e => setEditPass(e.target.value)} className="text-[10px] font-black w-full outline-none" placeholder="輸入新密碼..." />
                         </div>
                       ) : (
                         <p className="text-[10px] font-black text-gray-300 flex items-center gap-2"><Lock size={10}/> ENCRYPTED</p>
@@ -206,11 +229,14 @@ const AdminPanel: React.FC = () => {
                     <td className="py-8 px-10 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {isEditing ? (
-                          <button onClick={() => handleUpdate(u.memberId)} className="w-10 h-10 bg-black text-[#bef264] flex items-center justify-center hover:bg-lime-400 hover:text-black"><Save size={16} /></button>
+                          <>
+                            <button onClick={cancelEdit} className="w-10 h-10 bg-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-300"><X size={16} /></button>
+                            <button onClick={() => handleUpdate(u.memberId)} className="w-10 h-10 bg-black text-[#bef264] flex items-center justify-center hover:bg-lime-400 hover:text-black"><Save size={16} /></button>
+                          </>
                         ) : (
                           <button onClick={() => startEdit(u.memberId)} className="w-10 h-10 text-gray-300 hover:text-black flex items-center justify-center"><Edit3 size={16} /></button>
                         )}
-                        {!isRoot && <button onClick={() => handleDelete(u.memberId)} className="w-10 h-10 text-gray-200 hover:text-red-600 flex items-center justify-center"><Trash2 size={16} /></button>}
+                        {!isRoot && !isEditing && <button onClick={() => handleDelete(u.memberId)} className="w-10 h-10 text-gray-200 hover:text-red-600 flex items-center justify-center"><Trash2 size={16} /></button>}
                       </div>
                     </td>
                   </tr>

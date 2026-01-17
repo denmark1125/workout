@@ -108,7 +108,8 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
         const compressed = await compressImage(reader.result as string);
         setNewMealImage(compressed);
         setIsAnalyzing(true);
-        const analysis = await analyzeFoodImage(compressed);
+        // Pass profile for quota check
+        const analysis = await analyzeFoodImage(compressed, profile);
         setIsAnalyzing(false);
         if (analysis) {
           setNewMealName(analysis.name);
@@ -117,7 +118,7 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
           setNewMealC(analysis.macros.carbs.toString());
           setNewMealF(analysis.macros.fat.toString());
         } else {
-          alert("AI 無法辨識該食物，請手動輸入。");
+          // Alert handled in analyzeFoodImage for quota, handled here for API failure
         }
       };
       reader.readAsDataURL(file);

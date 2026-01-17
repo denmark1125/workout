@@ -3,13 +3,16 @@ import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, PhysiqueRecord, Mac
 import { getTaiwanDate, getTaiwanWeekId } from "../utils/calculations";
 
 // --- Configuration ---
-const API_TIMEOUT = 20000; // Flash 模型速度快，縮短 Timeout 至 20秒
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 Hours
 
-// --- Models (Resource Lean Strategy) ---
-const MODEL_TEXT_FAST = "gemini-3-flash-preview";      // For Daily Feedback
-const MODEL_VISION_FAST = "gemini-2.5-flash-image";    // For Food & Physique
-const MODEL_REASONING = "gemini-3-pro-preview";        // Only for Weekly Report
+// --- Models (Dual Mode Strategy) ---
+// Standard: 快速、低成本，用於高頻互動 (日常反饋、食物辨識)
+// Note: Using gemini-3-flash-preview as the modern standard for text tasks
+const MODEL_STD_TEXT = "gemini-3-flash-preview"; 
+const MODEL_STD_VISION = "gemini-2.5-flash-image";
+
+// Premium: 高智商、深度推理，用於核心戰略 (週報、體態分析)
+const MODEL_PREMIUM = "gemini-3-pro-preview"; 
 
 // --- Local Data (Zero Cost) ---
 const DAVID_QUOTES = [
@@ -31,8 +34,12 @@ const DAVID_QUOTES = [
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
+  // CRITICAL FIX: 使用 process.env.API_KEY 符合規範
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("System Configuration Error: API Key Missing");
+  if (!apiKey) {
+    console.error("Critical Error: API_KEY not found.");
+    throw new Error("System Configuration Error: API Key Missing");
+  }
   return new GoogleGenAI({ apiKey });
 };
 
@@ -58,12 +65,30 @@ const setCache = (key: string, data: any) => {
   localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
 };
 
-const checkAndIncrementQuota = (type: 'food' | 'physique', limit: number): boolean => {
+// 檢查權限與配額 (Freemium Logic)
+const checkAccess = (type: 'food' | 'physique' | 'weekly', profile: UserProfile, limit: number): { allowed: boolean; reason?: string } => {
+  // Premium Bypass: Admin 或 Root 帳號不受限制 (Functional Lock)
+  const isPremium = profile.role === 'admin' || profile.memberId === 'admin_roots';
+  
+  if (isPremium) {
+    return { allowed: true };
+  }
+
+  // Standard User Quota Check
   const key = getQuotaKey(type);
   const current = parseInt(localStorage.getItem(key) || '0', 10);
-  if (current >= limit) return false;
+  
+  if (current >= limit) {
+    return { allowed: false, reason: "Quota Exceeded" };
+  }
+  
+  return { allowed: true };
+};
+
+const incrementQuota = (type: 'food' | 'physique' | 'weekly') => {
+  const key = getQuotaKey(type);
+  const current = parseInt(localStorage.getItem(key) || '0', 10);
   localStorage.setItem(key, (current + 1).toString());
-  return true;
 };
 
 // --- Helper: Robust AI Call Wrapper ---
@@ -108,11 +133,13 @@ export const getDavidGreeting = async (profile: UserProfile): Promise<string> =>
 };
 
 /**
- * 食物辨識與營養分析 (Quota: 3/Day)
+ * 食物辨識與營養分析 (Standard Mode: Flash Vision)
+ * 配額: 每日 3 次 (Admin 無限)
  */
-export const analyzeFoodImage = async (base64Image: string): Promise<{ name: string; macros: MacroNutrients } | null> => {
+export const analyzeFoodImage = async (base64Image: string, profile: UserProfile): Promise<{ name: string; macros: MacroNutrients } | null> => {
   // 1. Check Quota
-  if (!checkAndIncrementQuota('food', 3)) {
+  const access = checkAccess('food', profile, 3);
+  if (!access.allowed) {
     alert('David 教練：今日偵察能量已耗盡，請改用手動輸入食物名稱以維持系統運作。');
     return null; 
   }
@@ -141,9 +168,9 @@ export const analyzeFoodImage = async (base64Image: string): Promise<{ name: str
       },
     };
 
-    // 使用 Flash Image 模型節省成本
+    // 使用 Standard Vision 模型 (Gemini 2.5 Flash Image)
     const response = await ai.models.generateContent({
-      model: MODEL_VISION_FAST,
+      model: MODEL_STD_VISION,
       contents: { parts: [imagePart, { text: prompt }] },
       config: { temperature: 0.1 }
     });
@@ -155,20 +182,23 @@ export const analyzeFoodImage = async (base64Image: string): Promise<{ name: str
        return null;
     }
     
+    // 成功後扣除配額 (Admin Bypass)
+    const isPremium = profile.role === 'admin' || profile.memberId === 'admin_roots';
+    if (!isPremium) incrementQuota('food');
+
     return JSON.parse(jsonMatch[0]);
   });
 };
 
 /**
  * AI 營養戰略校準 (Settings Calibration)
- * 頻率極低，維持使用 Flash
+ * 頻率極低，維持使用 Flash (Standard Mode)
  */
 export const calculateAiNutritionPlan = async (
    weight: number, height: number, age: number, gender: string,
    activity: ActivityLevel, goal: string, dietPref: DietaryPreference
 ): Promise<{ dailyCalorieTarget: number, macroTargets: { protein: number, carbs: number, fat: number }, advice: string } | null> => {
    
-   // Cache check based on parameters hash-like string
    const cacheKey = `matrix_calc_${weight}_${height}_${age}_${goal}`;
    const cached = checkCache(cacheKey);
    if (cached) return JSON.parse(cached);
@@ -193,7 +223,7 @@ export const calculateAiNutritionPlan = async (
       `;
 
       const response = await ai.models.generateContent({
-         model: MODEL_TEXT_FAST,
+         model: MODEL_STD_TEXT, // Flash
          contents: prompt,
          config: { temperature: 0.2 }
       });
@@ -202,7 +232,7 @@ export const calculateAiNutritionPlan = async (
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Invalid JSON");
 
-      setCache(cacheKey, jsonMatch[0]); // Cache result
+      setCache(cacheKey, jsonMatch[0]); 
       const data = JSON.parse(jsonMatch[0]);
       return {
          dailyCalorieTarget: data.tdee,
@@ -218,7 +248,7 @@ export const calculateAiNutritionPlan = async (
 
 /**
  * 獲取今日訓練反饋 (Daily Feedback)
- * 使用 Flash + 極致資料修剪 + 強制快取
+ * Standard Mode: Flash + 資料修剪 + 強制快取
  */
 export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLog): Promise<string> => {
   const cacheKey = getCacheKey('daily_feedback', profile.memberId);
@@ -243,7 +273,7 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
   return callAIWithRetry(async () => {
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
-      model: MODEL_TEXT_FAST, 
+      model: MODEL_STD_TEXT, // Flash
       contents: prompt,
       config: { temperature: 0.7 }
     });
@@ -255,12 +285,13 @@ export const getDailyFeedback = async (profile: UserProfile, todayLog: WorkoutLo
 };
 
 /**
- * 視覺診斷 (Physique Analysis) (Quota: 1/Day)
- * 使用 Flash Image
+ * 視覺診斷 (Physique Analysis)
+ * Premium/Pro Mode Logic
+ * 配額: 每日 1 次 (Admin 無限)
  */
 export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProfile) => {
-  // 1. Check Quota (Also double checked by UI, but enforced here)
-  if (!checkAndIncrementQuota('physique', 1)) {
+  const access = checkAccess('physique', profile, 1);
+  if (!access.allowed) {
     return "### 🚫 存取限制\n\nDavid 教練：視覺診斷模組每日僅能啟動一次。過度頻繁的檢測無助於成長，請專注於訓練本身。";
   }
 
@@ -281,12 +312,20 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
   return callAIWithRetry(async () => {
     try {
       const ai = getAIInstance();
+      // Premium Logic: Use Pro model for detailed vision analysis
       const response = await ai.models.generateContent({
-        model: MODEL_VISION_FAST, 
+        model: MODEL_PREMIUM, 
         contents: { parts: [imagePart, { text: prompt }] },
         config: { temperature: 0.7 }
       });
-      return response.text || "David 教練：目前無法解析該體態數據。";
+      
+      const text = response.text || "David 教練：目前無法解析該體態數據。";
+      
+      // 成功後扣除配額
+      const isPremium = profile.role === 'admin' || profile.memberId === 'admin_roots';
+      if (!isPremium && !text.includes('存取限制')) incrementQuota('physique');
+      
+      return text;
     } catch (error: any) {
       if (error.message === 'ABORTED_SILENT') return "";
       return `### ⚠️ 系統連線異常\nDavid 教練：視覺核心連線失敗。`;
@@ -296,7 +335,7 @@ export const getPhysiqueAnalysis = async (imageBase64: string, profile: UserProf
 
 /**
  * 戰略週報 (Weekly Report)
- * 維持使用 Pro 模型，因為需要深度推理
+ * Premium Mode: Pro Model for Deep Reasoning
  */
 export const generateWeeklyReport = async (
   profile: UserProfile, 
@@ -307,9 +346,10 @@ export const generateWeeklyReport = async (
   const currentWeek = getTaiwanWeekId();
   const cacheKey = getCacheKey('weekly_report', `${profile.memberId}_${currentWeek}`);
   
-  // 檢查週報配額 (2/week) - 保留原邏輯，但增加快取檢查
-  if (profile.weeklyReportUsage?.weekId === currentWeek && profile.weeklyReportUsage.count >= 2) {
-     // 如果有快取，即使超過配額也可以回傳舊的快取內容 (Optional optimization, here we strictly block new generations)
+  // 檢查週報配額 (2/week) - Admin Bypass
+  const isPremium = profile.role === 'admin' || profile.memberId === 'admin_roots';
+  
+  if (!isPremium && profile.weeklyReportUsage?.weekId === currentWeek && profile.weeklyReportUsage.count >= 2) {
      const cached = checkCache(cacheKey);
      if (cached) return cached;
      return "### 🚫 存取限制\n\nDavid 教練：戰略週報每週僅限生成兩次。請下週再來。";
@@ -342,8 +382,9 @@ export const generateWeeklyReport = async (
   return callAIWithRetry(async () => {
     try {
       const ai = getAIInstance();
+      // Premium Logic: Pro Model
       const response = await ai.models.generateContent({
-        model: MODEL_REASONING, // Keep Pro for deep reasoning
+        model: MODEL_PREMIUM, 
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }],
@@ -372,7 +413,7 @@ export const generateWeeklyReport = async (
 
 /**
  * 每日獎勵簡報
- * 使用 Flash + 快取
+ * Standard Mode: Flash
  */
 export const getDailyBriefing = async (profile: UserProfile, streak: number): Promise<string> => {
   const cacheKey = getCacheKey('daily_briefing', profile.memberId);
@@ -385,7 +426,7 @@ export const getDailyBriefing = async (profile: UserProfile, streak: number): Pr
     try {
       const ai = getAIInstance();
       const response = await ai.models.generateContent({
-        model: MODEL_TEXT_FAST,
+        model: MODEL_STD_TEXT, // Flash
         contents: prompt,
         config: { temperature: 0.9 }
       });
