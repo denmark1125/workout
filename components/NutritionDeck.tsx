@@ -4,7 +4,7 @@ import { DietLog, MealRecord, MacroNutrients, UserProfile, WorkoutLog } from '..
 import { analyzeFoodImage } from '../services/geminiService';
 import { getTaiwanDate } from '../utils/calculations';
 import { FOOD_DATABASE, FoodItem } from '../utils/foodDatabase';
-import { Plus, Camera, ChevronLeft, ChevronRight, X, Loader2, Utensils, Flame, Droplets, Beef, Wheat, Sandwich, Moon, Sun, Coffee, Trash2, Search, Database } from 'lucide-react';
+import { Plus, Camera, ChevronLeft, ChevronRight, X, Loader2, Utensils, Flame, Droplets, Beef, Wheat, Sandwich, Moon, Sun, Coffee, Trash2, Search, Database, Scale } from 'lucide-react';
 
 interface NutritionDeckProps {
   dietLogs: DietLog[];
@@ -34,6 +34,10 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
   const [newMealC, setNewMealC] = useState('');
   const [newMealF, setNewMealF] = useState('');
   const [newMealImage, setNewMealImage] = useState<string | null>(null);
+  
+  // Base Data for Multiplier Logic (Supports both DB and AI)
+  const [baseName, setBaseName] = useState('');
+  const [baseMacros, setBaseMacros] = useState<MacroNutrients | null>(null);
   
   // Database Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,6 +104,15 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
     });
   };
 
+  const updateFormValues = (name: string, macros: MacroNutrients, multiplier: number) => {
+    const suffix = multiplier !== 1 ? ` (x${multiplier})` : '';
+    setNewMealName(`${name}${suffix}`);
+    setNewMealCals(Math.round(macros.calories * multiplier).toString());
+    setNewMealP(Math.round(macros.protein * multiplier).toString());
+    setNewMealC(Math.round(macros.carbs * multiplier).toString());
+    setNewMealF(Math.round(macros.fat * multiplier).toString());
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -112,11 +125,10 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
         const analysis = await analyzeFoodImage(compressed, profile);
         setIsAnalyzing(false);
         if (analysis) {
-          setNewMealName(analysis.name);
-          setNewMealCals(analysis.macros.calories.toString());
-          setNewMealP(analysis.macros.protein.toString());
-          setNewMealC(analysis.macros.carbs.toString());
-          setNewMealF(analysis.macros.fat.toString());
+          setBaseName(analysis.name);
+          setBaseMacros(analysis.macros);
+          setPortionMultiplier(1);
+          updateFormValues(analysis.name, analysis.macros, 1);
         } else {
           // Alert handled in analyzeFoodImage for quota, handled here for API failure
         }
@@ -128,22 +140,16 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
   // 處理資料庫食物選擇
   const handleSelectFood = (item: FoodItem) => {
     setSelectedFoodItem(item);
-    applyFoodToForm(item, portionMultiplier);
-  };
-
-  const applyFoodToForm = (item: FoodItem, multiplier: number) => {
-    const suffix = multiplier !== 1 ? ` (x${multiplier})` : '';
-    setNewMealName(`${item.name}${suffix}`);
-    setNewMealCals(Math.round(item.macros.calories * multiplier).toString());
-    setNewMealP(Math.round(item.macros.protein * multiplier).toString());
-    setNewMealC(Math.round(item.macros.carbs * multiplier).toString());
-    setNewMealF(Math.round(item.macros.fat * multiplier).toString());
+    setBaseName(item.name);
+    setBaseMacros(item.macros);
+    setPortionMultiplier(1);
+    updateFormValues(item.name, item.macros, 1);
   };
 
   const handleMultiplierChange = (m: number) => {
     setPortionMultiplier(m);
-    if (selectedFoodItem) {
-      applyFoodToForm(selectedFoodItem, m);
+    if (baseMacros) {
+      updateFormValues(baseName, baseMacros, m);
     }
   };
 
@@ -192,6 +198,8 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
     setSearchQuery('');
     setSelectedFoodItem(null);
     setPortionMultiplier(1);
+    setBaseName('');
+    setBaseMacros(null);
   };
 
   const openAddModal = (type: keyof typeof MEAL_TYPES) => {
@@ -419,24 +427,6 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
                              ))
                           )}
                        </div>
-
-                       {/* Portion Multiplier */}
-                       {selectedFoodItem && (
-                          <div className="space-y-2 p-4 bg-gray-50 border border-gray-100 rounded-sm">
-                             <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">份量調整 (MULTIPLIER)</p>
-                             <div className="flex justify-between gap-2">
-                                {[0.25, 0.5, 1, 1.5, 2].map(m => (
-                                   <button 
-                                     key={m} 
-                                     onClick={() => handleMultiplierChange(m)}
-                                     className={`flex-1 py-2 text-[10px] font-black border transition-all ${portionMultiplier === m ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-200'}`}
-                                   >
-                                      x{m}
-                                   </button>
-                                ))}
-                             </div>
-                          </div>
-                       )}
                     </div>
                  )}
 
@@ -464,6 +454,43 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
                         )}
                         <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
                      </div>
+                 )}
+
+                 {/* Common Portion Multiplier (Visible when any food is selected or AI Analyzed) */}
+                 {baseMacros && (
+                    <div className="space-y-2 p-4 bg-[#fcfcfc] border border-gray-200 rounded-sm border-l-4 border-l-black">
+                       <div className="flex justify-between items-center mb-2">
+                          <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
+                             <Scale size={12} /> 份量/份數調整 (PORTION MULTIPLIER)
+                          </p>
+                          <span className="text-xs font-black bg-black text-[#bef264] px-2 py-0.5 rounded-sm">x{portionMultiplier}</span>
+                       </div>
+                       <div className="flex justify-between gap-2 overflow-x-auto no-scrollbar">
+                          {[0.25, 0.5, 1, 1.5, 2, 3].map(m => (
+                             <button 
+                               key={m} 
+                               onClick={() => handleMultiplierChange(m)}
+                               className={`flex-1 min-w-[40px] py-3 text-[10px] font-black border transition-all ${portionMultiplier === m ? 'bg-black text-[#bef264] border-black shadow-md' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'}`}
+                             >
+                                x{m}
+                             </button>
+                          ))}
+                          <div className="flex items-center border border-gray-200 bg-white px-2 focus-within:border-black transition-all">
+                             <span className="text-[10px] font-black text-gray-300 mr-1">自訂</span>
+                             <input 
+                               type="number" 
+                               step="0.1"
+                               min="0"
+                               value={portionMultiplier}
+                               onChange={(e) => handleMultiplierChange(parseFloat(e.target.value) || 0)}
+                               className="w-12 py-2 text-[10px] font-black text-center outline-none"
+                             />
+                          </div>
+                       </div>
+                       <p className="text-[8px] text-gray-400 font-bold mt-1 text-right">
+                          {addMode === 'CAMERA' ? '多人共食時請調整您的攝取比例' : '依據包裝或實際份量調整'}
+                       </p>
+                    </div>
                  )}
 
                  {/* Manual Edit Fields (Pre-filled by AI or DB) */}

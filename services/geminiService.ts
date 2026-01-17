@@ -34,8 +34,7 @@ const DAVID_QUOTES = [
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  // Use the specific environment variable requested by the user: VITE_WORKOUT_GEMINI_API
-  // Note: In Vite, we use import.meta.env
+  // 依照您的指示修正：VITE_WORKOUT_GEMINI_API
   const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;
   
   if (!apiKey) {
