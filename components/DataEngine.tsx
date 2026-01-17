@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { UserMetrics, UserProfile, GoalMetadata } from '../types';
 import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus, getLocalTimestamp, getTaiwanDate } from '../utils/calculations';
-import { TrendingUp, History, Trash2, ChevronDown, Info, AlertCircle, Calendar } from 'lucide-react';
+import { TrendingUp, History, Trash2, ChevronDown, Info, AlertCircle, Calendar, Weight, Scale } from 'lucide-react';
 
 interface DataEngineProps {
   profile: UserProfile;
@@ -14,8 +14,8 @@ interface DataEngineProps {
   isDbConnected: boolean;
 }
 
-const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, onUpdateMetrics, isDbConnected }) => {
-  const latest = metrics[metrics.length - 1] || { 
+const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMetric, onUpdateMetrics, isDbConnected }) => {
+  const latest = metrics.length > 0 ? metrics[metrics.length - 1] : { 
     weight: profile.height - 105, 
     bodyFat: profile.gender === 'F' ? 22 : 15, 
     muscleMass: 0, 
@@ -47,7 +47,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
     const weightVal = Number(input.weight) || 0;
     const bodyFatVal = Number(input.bodyFat) || 0;
     
-    // 修正：不再打八折，直接計算除脂體重 (Total Lean Mass)
+    // 修正：不再打八折，直接計算除脂體重 (Lean Body Mass)
     const mMass = input.muscleMass === '' 
       ? Number((weightVal * (1 - bodyFatVal / 100)).toFixed(1))
       : Number(input.muscleMass);
@@ -76,6 +76,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
   };
 
   const trendData = useMemo(() => {
+    if (!metrics || metrics.length === 0) return [];
     return [...metrics]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(-7)

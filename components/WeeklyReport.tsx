@@ -5,35 +5,18 @@ import { generateWeeklyReport } from '../services/geminiService';
 import { getTaiwanWeekId } from '../utils/calculations';
 import { FileText, Zap, ArrowRight, Loader2, Target, Brain, Activity, User, Calendar, Image as ImageIcon, ChevronDown, History } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import TacticalLoader from './TacticalLoader';
 
-interface WeeklyReportProps {
-  profile: UserProfile;
-  metrics: UserMetrics[];
-  logs: WorkoutLog[];
-  physiqueRecords: PhysiqueRecord[];
-  onProfileUpdate: (p: UserProfile) => void;
-  weeklyReports: WeeklyReportData[];
-  onAddReport: (r: WeeklyReportData) => void;
-}
-
-// === Rich Text Parser for Beautiful Rendering ===
+// === Rich Text Parser ===
 const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
-
-  // Pre-process: Remove common markdown clutter that AI might output
-  const cleanText = text
-    .replace(/\*\*\*/g, '') // Remove triple asterisks
-    .replace(/```/g, '') // Remove code blocks
-    .replace(/##/g, ''); // Remove header markers (we handle headers by logic)
-
+  const cleanText = text.replace(/\*\*\*/g, '').replace(/```/g, '').replace(/##/g, '');
   const lines = cleanText.split('\n').filter(line => line.trim() !== '');
   
   return (
     <div className="space-y-6">
       {lines.map((line, index) => {
         const trimmed = line.trim();
-        
-        // 1. Headers (Often starts with "###" or is short and ends with colon)
         if (trimmed.startsWith('###') || (trimmed.length < 30 && trimmed.endsWith('：')) || (trimmed.length < 30 && trimmed.endsWith(':'))) {
            return (
              <h3 key={index} className="text-xl md:text-2xl font-black uppercase tracking-tighter text-white mt-8 mb-4 border-l-4 border-[#bef264] pl-4">
@@ -41,10 +24,7 @@ const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
              </h3>
            );
         }
-
-        // 2. Bullet Points
         if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
-           // Highlight bold parts within the list item
            const content = trimmed.substring(1).trim();
            return (
              <div key={index} className="flex gap-4 items-start pl-2 group">
@@ -59,8 +39,6 @@ const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
              </div>
            );
         }
-
-        // 3. Regular Paragraphs
         return (
            <p key={index} className="text-gray-400 leading-relaxed text-sm md:text-base pl-6 border-l border-white/10">
               {trimmed.split(/(\*\*.*?\*\*)/).map((part, i) => 
@@ -75,6 +53,17 @@ const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
+// Add missing WeeklyReportProps interface
+interface WeeklyReportProps {
+  profile: UserProfile;
+  metrics: UserMetrics[];
+  logs: WorkoutLog[];
+  physiqueRecords: PhysiqueRecord[];
+  onProfileUpdate: (profile: UserProfile) => void;
+  weeklyReports: WeeklyReportData[];
+  onAddReport: (report: WeeklyReportData) => void;
+}
+
 const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, physiqueRecords, onProfileUpdate, weeklyReports, onAddReport }) => {
   const [report, setReport] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,7 +74,6 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
   const currentCount = profile.weeklyReportUsage?.weekId === currentWeek ? profile.weeklyReportUsage.count : 0;
   const isLimitReached = currentCount >= 2 && profile.role !== 'admin';
 
-  // Load latest report if exists and we haven't generated one this session
   React.useEffect(() => {
      if (!report && weeklyReports.length > 0) {
         setReport(weeklyReports[0].content);
@@ -98,13 +86,13 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
       return;
     }
     setLoading(true);
+    setReport(null);
     try {
       const result = await generateWeeklyReport(profile, metrics, logs, physiqueRecords);
       const textResult = result || "生成失敗，系統無效回饋。";
       setReport(textResult);
       
-      // Auto-save the report
-      if (profile.role !== 'admin' && !textResult.includes('存取限制') && !textResult.includes('流量管制')) {
+      if (profile.role !== 'admin' && !textResult.includes('限制') && !textResult.includes('流量')) {
         const newReportData: WeeklyReportData = {
            id: Date.now().toString(),
            weekId: currentWeek,
@@ -133,7 +121,7 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
     try {
       const canvas = await html2canvas(reportRef.current, {
         backgroundColor: '#111111',
-        scale: 2, // Higher resolution
+        scale: 2,
         useCORS: true,
         logging: false
       });
@@ -171,14 +159,7 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
                className={`flex-1 md:flex-none px-6 py-5 font-black uppercase tracking-[0.2em] text-xs transition-all flex items-center justify-center gap-4 shadow-xl transform hover:-translate-y-1
                  ${loading || isLimitReached ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-[#bef264] hover:bg-[#bef264] hover:text-black'}`}
              >
-               {loading ? (
-                 <>
-                   <Loader2 className="w-5 h-5 animate-spin" /> 
-                   <span className="animate-pulse">Analyzing...</span>
-                 </>
-               ) : (
-                 <><Zap className="w-5 h-5 fill-current" /> 生成戰略報告</>
-               )}
+               {loading ? <span className="animate-pulse">Analyzing...</span> : <><Zap className="w-5 h-5 fill-current" /> 生成戰略報告</>}
              </button>
              
              {report && (
@@ -220,13 +201,15 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
          </div>
       )}
 
-      {report ? (
+      {loading ? (
+        <div className="bg-white border border-gray-100 p-12 shadow-inner min-h-[500px] flex items-center justify-center">
+          <TacticalLoader type="REPORT" title="David 正在為你擬定下週進化策略" />
+        </div>
+      ) : report ? (
         <div className="animate-in fade-in slide-in-from-bottom-10 duration-700">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[800px]" ref={reportRef}>
-            
-            {/* Left Column: Physiological DNA (Profile Card) */}
+            {/* 內容渲染部分保留 */}
             <div className="lg:col-span-4 space-y-6">
-               {/* Identity Card */}
                <div className="bg-black text-white p-8 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#bef264] blur-[80px] opacity-20 group-hover:opacity-30 transition-opacity rounded-full"></div>
                   <div className="relative z-10 space-y-6">
@@ -253,8 +236,6 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
                      </div>
                   </div>
                </div>
-
-               {/* Stat Grid */}
                <div className="grid grid-cols-2 gap-2">
                   <div className="bg-white border border-gray-200 p-6 flex flex-col justify-between h-32 hover:border-black transition-colors">
                      <Target className="w-6 h-6 text-black mb-2" />
@@ -272,22 +253,16 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
                   </div>
                </div>
             </div>
-
-            {/* Right Column: Tactical Report (The Main Content) */}
             <div className="lg:col-span-8 bg-[#111] text-gray-200 p-10 md:p-16 relative overflow-hidden shadow-2xl rounded-sm flex flex-col">
-               {/* Background Deco */}
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#bef264] to-transparent"></div>
                <div className="absolute bottom-0 right-0 w-full h-1 bg-gradient-to-l from-[#bef264] to-transparent"></div>
-               
                <div className="flex items-center gap-4 mb-12">
                   <div className="w-3 h-3 bg-[#bef264] animate-pulse"></div>
                   <h3 className="text-sm font-mono font-black text-[#bef264] uppercase tracking-[0.4em]">Tactical Analysis Report</h3>
                </div>
-
                <div className="relative z-10 flex-1">
                   <RichTextParser text={report} />
                </div>
-
                <div className="mt-16 pt-8 border-t border-white/10 flex justify-between items-end">
                   <div>
                      <p className="text-[9px] font-black uppercase text-gray-600 tracking-widest">Authorized By</p>
@@ -296,11 +271,9 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
                   <Brain className="w-10 h-10 text-white/10" />
                </div>
             </div>
-
           </div>
         </div>
       ) : (
-        /* Standby State */
         <div className="grid grid-cols-1 md:grid-cols-12 bg-white gap-px p-px shadow-xl rounded-sm overflow-hidden border border-gray-200 min-h-[400px]">
            <div className="md:col-span-4 bg-gray-50 p-16 flex flex-col items-center justify-center text-center space-y-6">
               <FileText className="w-12 h-12 text-gray-300" />
@@ -315,11 +288,6 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
                 <p className="text-gray-500 font-medium leading-relaxed">
                    AI 健身戰略中樞正在待命。啟動後，系統將整合您的 <span className="text-black font-bold">訓練日誌</span>、<span className="text-black font-bold">生理矩陣</span> 與 <span className="text-black font-bold">視覺診斷</span>，生成一份專屬於您的戰術週報。
                 </p>
-             </div>
-             <div className="flex gap-4">
-                <div className="h-1 w-12 bg-black"></div>
-                <div className="h-1 w-4 bg-gray-200"></div>
-                <div className="h-1 w-4 bg-gray-200"></div>
              </div>
            </div>
         </div>

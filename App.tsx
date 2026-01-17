@@ -32,13 +32,8 @@ const App: React.FC = () => {
   const [pendingReward, setPendingReward] = useState<any>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   
-  const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
-  const [isBriefingLoading, setIsBriefingLoading] = useState(false);
   const [davidGreeting, setDavidGreeting] = useState<string>("");
-  const [isGreetingLoading, setIsGreetingLoading] = useState(false);
   
-  const fetchingGreetingRef = useRef(false);
-
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
     return localStorage.getItem('matrix_active_user');
   });
@@ -50,7 +45,8 @@ const App: React.FC = () => {
   
   const [loginError, setLoginError] = useState(false);
 
-  const [profile, setProfile] = useState<UserProfile>({
+  // 預設設定檔，用於深度合併防止 Undefined 報錯
+  const DEFAULT_PROFILE: UserProfile = {
     name: 'User', age: 25, height: 175, gender: 'M', goal: FitnessGoal.HYPERTROPHY,
     equipment: [], customEquipmentPool: [], customGoalText: '',
     loginStreak: 1, lastLoginDate: '',
@@ -63,22 +59,22 @@ const App: React.FC = () => {
     lastPhysiqueAnalysisDate: '',
     weeklyReportUsage: { weekId: '', count: 0 },
     privacySettings: { syncPhysiqueImages: true, syncMetrics: true },
-    dailyCalorieTarget: 2200 
-  });
+    dailyCalorieTarget: 2200,
+    macroTargets: { protein: 150, carbs: 200, fat: 60 }
+  };
 
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [metrics, setMetrics] = useState<UserMetrics[]>([]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [physiqueRecords, setPhysiqueRecords] = useState<PhysiqueRecord[]>([]);
   const [dietLogs, setDietLogs] = useState<DietLog[]>([]);
   const [reports, setReports] = useState<WeeklyReportData[]>([]);
 
-  // 偵測資料庫連線狀態
   useEffect(() => {
     const interval = setInterval(() => setDbConnected(db !== null), 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // 登錄後初始化雲端數據
   useEffect(() => {
     const initializeCloudData = async () => {
       if (!isAuthenticated || !currentMemberId) return;
@@ -93,12 +89,13 @@ const App: React.FC = () => {
           fetchFromCloud('reports', currentMemberId)
         ]);
         
-        if (p) setProfile(p);
-        if (m) setMetrics(m);
-        if (l) setLogs(l);
-        if (ph) setPhysiqueRecords(ph);
-        if (d) setDietLogs(d);
-        if (r) setReports(r);
+        // 深度合併 Profile，防止 Undefined 造成的 reduce 報錯
+        if (p) setProfile(prev => ({ ...DEFAULT_PROFILE, ...prev, ...p }));
+        if (m) setMetrics(Array.isArray(m) ? m : []);
+        if (l) setLogs(Array.isArray(l) ? l : []);
+        if (ph) setPhysiqueRecords(Array.isArray(ph) ? ph : []);
+        if (d) setDietLogs(Array.isArray(d) ? d : []);
+        if (r) setReports(Array.isArray(r) ? r : []);
 
       } catch (e) {
         console.error("初始化雲端資料失敗", e);
@@ -110,30 +107,22 @@ const App: React.FC = () => {
     initializeCloudData();
   }, [isAuthenticated, currentMemberId]);
 
-  // 核心自動同步效應：數據變動時即時同步
   useEffect(() => {
     if (!isDataLoaded || !isAuthenticated || !currentMemberId) return;
 
     const performSync = async () => {
       const canSync = profile.privacySettings?.syncMetrics ?? true;
-      
-      // 如果隱私設定關閉同步，直接回傳不執行雲端寫入
-      if (!canSync) {
-        console.log("隱私模式：暫停雲端同步。");
-        return;
-      }
+      if (!canSync) return;
 
       setIsSyncing(true);
       setSyncError(false);
       try {
-        // 同步所有模塊
         await Promise.all([
           syncToCloud('profiles', profile, currentMemberId),
           syncToCloud('metrics', metrics, currentMemberId, true),
           syncToCloud('logs', logs, currentMemberId, true),
           syncToCloud('diet', dietLogs, currentMemberId, true),
           syncToCloud('reports', reports, currentMemberId, true),
-          // 體態紀錄：雲端僅存文字，照片留存本地
           syncToCloud('physique', physiqueRecords, currentMemberId, true, physiqueRecords.map(r => ({ ...r, image: "" })))
         ]);
       } catch (err) {
@@ -147,11 +136,9 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [profile, metrics, logs, physiqueRecords, dietLogs, reports, isAuthenticated, currentMemberId, isDataLoaded]);
 
-  // 教練問候與 AI 初始化 - 改用本地邏輯減少 AI 呼叫
   useEffect(() => {
     if (isAuthenticated) {
-      const greeting = getLocalDavidGreeting(profile);
-      setDavidGreeting(greeting);
+      setDavidGreeting(getLocalDavidGreeting(profile));
     }
   }, [isAuthenticated, profile.name]);
 
@@ -164,7 +151,6 @@ const App: React.FC = () => {
       sessionStorage.setItem('matrix_session', 'active');
       localStorage.setItem('matrix_active_user', mid);
       recordLoginEvent(mid);
-      setLoginError(false);
     } else {
       setLoginError(true);
     }
@@ -179,14 +165,12 @@ const App: React.FC = () => {
 
   if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={() => {}} loginError={loginError} />;
 
-  // 決定狀態列顯示標籤
   const syncEnabled = profile.privacySettings?.syncMetrics ?? true;
 
   return (
     <div className="flex min-h-screen bg-white">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} profile={profile} />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
-        {/* 頂部導航欄 - 強化同步狀態顯示 */}
         <div className="bg-black text-[#bef264] px-4 md:px-8 py-3 flex items-start gap-4 shadow-md z-20 sticky top-0 shrink-0 border-b border-white/5">
            <div className="mt-0.5 animate-pulse"><Terminal size={16} /></div>
            <div className="flex-1 overflow-hidden">
@@ -194,7 +178,6 @@ const App: React.FC = () => {
              <p className="text-sm font-bold font-mono truncate">{davidGreeting || '正在讀取戰術指令...'}</p>
            </div>
            
-           {/* 同步連線狀態標籤 (顯眼反饋) */}
            <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-sm border border-white/10">
              {!syncEnabled ? (
                <div className="flex items-center gap-2 text-gray-400">

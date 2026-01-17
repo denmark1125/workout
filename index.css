@@ -3,19 +3,23 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom Scrollbar for Webkit */
+@layer base {
+  html {
+    font-size: 16px; /* 基準字體提升 */
+  }
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 2px;
+  background: #cbd5e1;
+  border-radius: 10px;
 }
 
-/* Remove spin buttons from number input */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
@@ -28,4 +32,13 @@ input[type="number"]::-webkit-outer-spin-button {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* AI 讀取動畫效果 */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

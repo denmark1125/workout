@@ -7,6 +7,8 @@ export interface FoodItem {
   unit: string; // e.g., "1顆", "100g", "1份"
   macros: MacroNutrients;
   category: 'STAPLE' | 'PROTEIN' | 'VEG' | 'DRINK' | 'SNACK' | 'CONVENIENCE';
+  /** Added source property for admin panel display */
+  source?: string;
 }
 
 export const FOOD_DATABASE: FoodItem[] = [

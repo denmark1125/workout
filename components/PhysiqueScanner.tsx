@@ -4,16 +4,9 @@ import { UserProfile, PhysiqueRecord } from '../types';
 import { getPhysiqueAnalysis } from '../services/geminiService';
 import { getTaiwanDate } from '../utils/calculations';
 import { Camera, ArrowRight, Trash2, Lock, Unlock, ChevronDown, ChevronUp, Loader2, Scan } from 'lucide-react';
+import TacticalLoader from './TacticalLoader';
 
-interface PhysiqueScannerProps {
-  profile: UserProfile;
-  records: PhysiqueRecord[];
-  onAddRecord: (record: PhysiqueRecord) => void;
-  onDeleteRecord?: (id: string) => void;
-  onProfileUpdate: (p: UserProfile) => void;
-}
-
-// === Rich Text Parser (Reused/Simplified for Physique) ===
+// === Rich Text Parser ===
 const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
   const cleanText = text.replace(/\*\*\*/g, '').replace(/```/g, '').replace(/##/g, '');
@@ -42,6 +35,15 @@ const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
+// Add missing PhysiqueScannerProps interface
+interface PhysiqueScannerProps {
+  profile: UserProfile;
+  records: PhysiqueRecord[];
+  onAddRecord: (record: PhysiqueRecord) => void;
+  onDeleteRecord?: (id: string) => void;
+  onProfileUpdate: (profile: UserProfile) => void;
+}
+
 const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onAddRecord, onDeleteRecord, onProfileUpdate }) => {
   const [image, setImage] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
@@ -52,7 +54,6 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Gatekeeper Check
   const today = getTaiwanDate();
   const isLimitReached = profile.lastPhysiqueAnalysisDate === today && profile.role !== 'admin';
 
@@ -94,6 +95,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
   const handleScan = async () => {
     if (!image) return;
     setLoading(true);
+    setAnalysis(null);
     try {
       const result = await getPhysiqueAnalysis(image, profile);
       const textResult = result || "系統分析異常，請重試。";
@@ -104,8 +106,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         image: image,
         analysis: textResult
       });
-      // 更新狀態以鎖定今日使用
-      if (profile.role !== 'admin' && !textResult.includes('存取限制') && !textResult.includes('連線逾時')) {
+      if (profile.role !== 'admin' && !textResult.includes('限制') && !textResult.includes('逾時')) {
          onProfileUpdate({ ...profile, lastPhysiqueAnalysisDate: today });
       }
     } catch (err) {
@@ -116,11 +117,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
   };
 
   const toggleExpand = (id: string) => {
-    if (expandedRecordId === id) {
-      setExpandedRecordId(null);
-    } else {
-      setExpandedRecordId(id);
-    }
+    setExpandedRecordId(expandedRecordId === id ? null : id);
   };
 
   const toggleImageLock = (e: React.MouseEvent, id: string) => {
@@ -149,12 +146,19 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         {/* 上傳區域 */}
         <div className="lg:col-span-5 p-10 space-y-8 flex flex-col items-center bg-gray-50/30">
           <div 
-            onClick={() => !isLimitReached && fileInputRef.current?.click()}
+            onClick={() => !isLimitReached && !loading && fileInputRef.current?.click()}
             className={`w-full aspect-[4/5] bg-white border-2 border-dashed flex flex-col items-center justify-center transition-all overflow-hidden group relative
-              ${isLimitReached ? 'cursor-not-allowed border-gray-300 opacity-50' : 'cursor-pointer border-gray-200 hover:border-lime-400'}`}
+              ${isLimitReached || loading ? 'cursor-not-allowed border-gray-300 opacity-50' : 'cursor-pointer border-gray-200 hover:border-lime-400'}`}
           >
             {image ? (
-              <img src={image} className="w-full h-full object-cover transition-transform duration-700" alt="Physique" />
+              <div className="relative w-full h-full">
+                <img src={image} className="w-full h-full object-cover transition-transform duration-700" alt="Physique" />
+                {loading && (
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
+                    <div className="w-full h-1 bg-[#bef264] absolute top-1/2 -translate-y-1/2 animate-[scan_2s_ease-in-out_infinite] shadow-[0_0_15px_#bef264]"></div>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="text-center p-8 space-y-4">
                 <Camera className="w-10 h-10 text-gray-200 mx-auto" />
@@ -163,22 +167,17 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
                 </p>
               </div>
             )}
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" disabled={isLimitReached} />
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" disabled={isLimitReached || loading} />
           </div>
 
           <button
             onClick={handleScan}
             disabled={!image || loading || isLimitReached}
-            className={`w-full py-6 font-black text-xs tracking-[0.4em] transition-all flex items-center justify-center gap-4 shadow-xl ${
-              !image || loading || isLimitReached ? 'bg-gray-100 text-gray-300' : 'bg-black text-white hover:bg-lime-400 hover:text-black uppercase animate-glow'
+            className={`w-full py-6 font-black text-xs tracking-[0.5em] transition-all flex items-center justify-center gap-4 shadow-xl uppercase ${
+              !image || loading || isLimitReached ? 'bg-gray-100 text-gray-300' : 'bg-black text-white hover:bg-[#bef264] hover:text-black'
             }`}
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="animate-pulse">David 戰略官分析中...</span>
-              </>
-            ) : isLimitReached ? '明日再戰 (COOLDOWN)' : '啟動 AI 體態診斷'}
+            {loading ? <span className="animate-pulse">David 教練診斷中...</span> : isLimitReached ? '明日再戰 (COOLDOWN)' : '啟動 AI 體態診斷'}
           </button>
         </div>
 
@@ -190,7 +189,11 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
           </div>
           
           <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar">
-            {analysis ? (
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <TacticalLoader type="SCAN" title="David 正透過影像對齊你的肌肉矩陣" />
+              </div>
+            ) : analysis ? (
               <RichTextParser text={analysis} />
             ) : (
               <div className="h-full flex flex-col items-center justify-center py-20 opacity-10 grayscale">
@@ -202,7 +205,7 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
         </div>
       </div>
       
-      {/* 歷史存檔列表 */}
+      {/* 歷史存檔列表 - 保留原樣 */}
       <div className="space-y-8">
         <div className="flex items-end justify-between border-b border-gray-100 pb-4">
            <h3 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-4">
@@ -292,6 +295,13 @@ const PhysiqueScanner: React.FC<PhysiqueScannerProps> = ({ profile, records, onA
           )}
         </div>
       </div>
+      <style>{`
+        @keyframes scan {
+          0% { top: 0; }
+          50% { top: 100%; }
+          100% { top: 0; }
+        }
+      `}</style>
     </div>
   );
 };

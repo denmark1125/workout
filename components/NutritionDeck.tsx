@@ -4,7 +4,8 @@ import { DietLog, MealRecord, MacroNutrients, UserProfile, WorkoutLog } from '..
 import { analyzeFoodImage } from '../services/geminiService';
 import { getTaiwanDate } from '../utils/calculations';
 import { FOOD_DATABASE, FoodItem } from '../utils/foodDatabase';
-import { Plus, Camera, ChevronLeft, ChevronRight, X, Loader2, Utensils, Flame, Droplets, Beef, Wheat, Sandwich, Moon, Sun, Coffee, Trash2, Search, Database } from 'lucide-react';
+import { Plus, Camera, ChevronLeft, ChevronRight, X, Loader2, Utensils, Flame, Droplets, Beef, Wheat, Sandwich, Moon, Sun, Coffee, Trash2, Search, Database, QrCode } from 'lucide-react';
+import TacticalLoader from './TacticalLoader';
 
 interface NutritionDeckProps {
   dietLogs: DietLog[];
@@ -14,20 +15,19 @@ interface NutritionDeckProps {
 }
 
 const MEAL_TYPES = {
-  breakfast: { label: '早餐 BREAKFAST', icon: <Coffee size={14}/> },
-  lunch: { label: '午餐 LUNCH', icon: <Sun size={14}/> },
-  dinner: { label: '晚餐 DINNER', icon: <Utensils size={14}/> },
-  snack: { label: '點心 SNACK', icon: <Sandwich size={14}/> },
-  lateNight: { label: '宵夜 LATE NIGHT', icon: <Moon size={14}/> }
+  breakfast: { label: '早餐 BREAKFAST', icon: <Coffee size={16}/> },
+  lunch: { label: '午餐 LUNCH', icon: <Sun size={16}/> },
+  dinner: { label: '晚餐 DINNER', icon: <Utensils size={16}/> },
+  snack: { label: '點心 SNACK', icon: <Sandwich size={16}/> },
+  nightSnack: { label: '宵夜 NIGHT SNACK', icon: <Moon size={16}/> }
 };
 
-const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog, profile, workoutLogs }) => {
+const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs = [], onUpdateDietLog, profile, workoutLogs }) => {
   const [selectedDate, setSelectedDate] = useState(getTaiwanDate());
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeMealType, setActiveMealType] = useState<keyof typeof MEAL_TYPES>('breakfast');
-  const [addMode, setAddMode] = useState<'CAMERA' | 'DATABASE'>('DATABASE');
+  const [addMode, setAddMode] = useState<'CAMERA' | 'DATABASE' | 'CUSTOM'>('DATABASE');
   
-  // New Meal Form
   const [newMealName, setNewMealName] = useState('');
   const [newMealCals, setNewMealCals] = useState('');
   const [newMealP, setNewMealP] = useState('');
@@ -35,115 +35,68 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
   const [newMealF, setNewMealF] = useState('');
   const [newMealImage, setNewMealImage] = useState<string | null>(null);
   
-  // Database Search State
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFoodItem, setSelectedFoodItem] = useState<FoodItem | null>(null);
-  const [portionMultiplier, setPortionMultiplier] = useState(1);
-  
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentLog = useMemo(() => {
-    return dietLogs.find(l => l.date === selectedDate) || {
+    const log = dietLogs.find(l => l.date === selectedDate);
+    // 強化安全性：確保 meals 物件及其所有時段皆為陣列
+    const baseLog = log || {
       id: selectedDate, date: selectedDate,
-      meals: { breakfast: [], lunch: [], dinner: [], snack: [], lateNight: [] },
+      meals: {},
       waterIntake: 0
     };
-  }, [dietLogs, selectedDate]);
+    
+    const safeMeals = {
+      breakfast: Array.isArray(baseLog.meals?.breakfast) ? baseLog.meals.breakfast : [],
+      lunch: Array.isArray(baseLog.meals?.lunch) ? baseLog.meals.lunch : [],
+      dinner: Array.isArray(baseLog.meals?.dinner) ? baseLog.meals.dinner : [],
+      snack: Array.isArray(baseLog.meals?.snack) ? baseLog.meals.snack : [],
+      nightSnack: Array.isArray(baseLog.meals?.nightSnack) ? baseLog.meals.nightSnack : []
+    };
 
-  const caloriesBurnedToday = useMemo(() => {
-    return workoutLogs
-      .filter(l => l.date === selectedDate)
-      .reduce((sum, log) => sum + (log.totalCaloriesBurned || 0), 0);
-  }, [workoutLogs, selectedDate]);
+    return { ...baseLog, meals: safeMeals };
+  }, [dietLogs, selectedDate]);
 
   const dailyTotals = useMemo(() => {
     let totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-    const allMeals = Object.values(currentLog.meals).flat() as MealRecord[];
-    allMeals.forEach(m => {
-      totals.calories += m.macros.calories;
-      totals.protein += m.macros.protein;
-      totals.carbs += m.macros.carbs;
-      totals.fat += m.macros.fat;
+    if (!currentLog.meals) return totals;
+
+    Object.values(currentLog.meals).forEach((mealList: any) => {
+      if (Array.isArray(mealList)) {
+        mealList.forEach((m: MealRecord) => {
+          totals.calories += Number(m.macros?.calories || 0);
+          totals.protein += Number(m.macros?.protein || 0);
+          totals.carbs += Number(m.macros?.carbs || 0);
+          totals.fat += Number(m.macros?.fat || 0);
+        });
+      }
     });
     return totals;
   }, [currentLog]);
-
-  const targetCalories = profile.dailyCalorieTarget || 2200;
-  const remainingCalories = targetCalories - dailyTotals.calories + caloriesBurnedToday;
-
-  const handleDateChange = (offset: number) => {
-    const date = new Date(selectedDate);
-    date.setDate(date.getDate() + offset);
-    setSelectedDate(date.toISOString().split('T')[0]);
-  };
-
-  const compressImage = (base64Str: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = base64Str;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        let width = img.width;
-        let height = img.height;
-        if (width > MAX_WIDTH) {
-          height *= MAX_WIDTH / width;
-          width = MAX_WIDTH;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      };
-    });
-  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const compressed = await compressImage(reader.result as string);
-        setNewMealImage(compressed);
+        setNewMealImage(reader.result as string);
         setIsAnalyzing(true);
-        // Pass profile for quota check
-        const analysis = await analyzeFoodImage(compressed, profile);
-        setIsAnalyzing(false);
-        if (analysis) {
-          setNewMealName(analysis.name);
-          setNewMealCals(analysis.macros.calories.toString());
-          setNewMealP(analysis.macros.protein.toString());
-          setNewMealC(analysis.macros.carbs.toString());
-          setNewMealF(analysis.macros.fat.toString());
-        } else {
-          // Alert handled in analyzeFoodImage for quota, handled here for API failure
+        try {
+          const analysis = await analyzeFoodImage(reader.result as string, profile);
+          if (analysis) {
+            setNewMealName(analysis.name);
+            setNewMealCals(analysis.macros.calories.toString());
+            setNewMealP(analysis.macros.protein.toString());
+            setNewMealC(analysis.macros.carbs.toString());
+            setNewMealF(analysis.macros.fat.toString());
+          }
+        } finally {
+          setIsAnalyzing(false);
         }
       };
       reader.readAsDataURL(file);
-    }
-  };
-
-  // 處理資料庫食物選擇
-  const handleSelectFood = (item: FoodItem) => {
-    setSelectedFoodItem(item);
-    applyFoodToForm(item, portionMultiplier);
-  };
-
-  const applyFoodToForm = (item: FoodItem, multiplier: number) => {
-    const suffix = multiplier !== 1 ? ` (x${multiplier})` : '';
-    setNewMealName(`${item.name}${suffix}`);
-    setNewMealCals(Math.round(item.macros.calories * multiplier).toString());
-    setNewMealP(Math.round(item.macros.protein * multiplier).toString());
-    setNewMealC(Math.round(item.macros.carbs * multiplier).toString());
-    setNewMealF(Math.round(item.macros.fat * multiplier).toString());
-  };
-
-  const handleMultiplierChange = (m: number) => {
-    setPortionMultiplier(m);
-    if (selectedFoodItem) {
-      applyFoodToForm(selectedFoodItem, m);
     }
   };
 
@@ -166,341 +119,216 @@ const NutritionDeck: React.FC<NutritionDeckProps> = ({ dietLogs, onUpdateDietLog
       ...currentLog,
       meals: {
         ...currentLog.meals,
-        [activeMealType]: [...currentLog.meals[activeMealType], newMeal]
+        [activeMealType]: [...(currentLog.meals[activeMealType] || []), newMeal]
       }
     };
     onUpdateDietLog(updatedLog);
-    resetForm();
     setShowAddModal(false);
-  };
-
-  const handleDeleteMeal = (type: keyof typeof MEAL_TYPES, id: string) => {
-    if(!confirm("確定刪除此紀錄？")) return;
-    const updatedLog: DietLog = {
-      ...currentLog,
-      meals: {
-        ...currentLog.meals,
-        [type]: currentLog.meals[type].filter(m => m.id !== id)
-      }
-    };
-    onUpdateDietLog(updatedLog);
+    resetForm();
   };
 
   const resetForm = () => {
-    setNewMealName(''); setNewMealCals(''); setNewMealP(''); setNewMealC(''); setNewMealF('');
-    setNewMealImage(null);
-    setSearchQuery('');
-    setSelectedFoodItem(null);
-    setPortionMultiplier(1);
-  };
-
-  const openAddModal = (type: keyof typeof MEAL_TYPES) => {
-    setActiveMealType(type);
-    resetForm();
-    setAddMode('DATABASE'); // Default to DB for convenience
-    setShowAddModal(true);
-  };
-
-  const filteredFoods = useMemo(() => {
-    return FOOD_DATABASE.filter(f => f.name.includes(searchQuery));
-  }, [searchQuery]);
-
-  const ProgressBar = ({ label, value, max, color }: { label: string, value: number, max: number, color: string }) => {
-    const percentage = Math.min(100, Math.max(0, (value / max) * 100));
-    return (
-      <div className="space-y-1">
-        <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-400">
-          <span>{label}</span>
-          <span>{Math.round(value)} / {max}g</span>
-        </div>
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-          <div className={`h-full ${color} transition-all duration-700`} style={{ width: `${percentage}%` }}></div>
-        </div>
-      </div>
-    );
+    setNewMealName(''); setNewMealCals(''); setNewMealP(''); setNewMealC(''); setNewMealF(''); setNewMealImage(null);
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-10 pb-32 animate-in fade-in duration-500 px-2 md:px-0">
+    <div className="max-w-4xl mx-auto space-y-10 pb-40">
       <header className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-gray-100 pb-8 gap-6">
         <div>
-           <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Nutritional Control Hub</p>
-           <h2 className="text-4xl md:text-5xl font-black text-black tracking-tighter uppercase leading-none">飲食控制中心</h2>
+           <p className="text-[11px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Nutritional Deck</p>
+           <h2 className="text-4xl md:text-5xl font-black text-black tracking-tighter uppercase leading-none">飲食控制</h2>
         </div>
         <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-full border border-gray-200">
-           <button onClick={() => handleDateChange(-1)} className="p-2 hover:bg-white rounded-full transition-all"><ChevronLeft size={16}/></button>
-           <span className="font-mono font-bold text-sm min-w-[100px] text-center">{selectedDate}</span>
-           <button onClick={() => handleDateChange(1)} className="p-2 hover:bg-white rounded-full transition-all"><ChevronRight size={16}/></button>
+           <button onClick={() => {
+             const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]);
+           }} className="p-3 hover:bg-white rounded-full transition-all"><ChevronLeft size={18}/></button>
+           <span className="font-bold text-base min-w-[120px] text-center">{selectedDate}</span>
+           <button onClick={() => {
+             const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]);
+           }} className="p-3 hover:bg-white rounded-full transition-all"><ChevronRight size={18}/></button>
         </div>
       </header>
 
-      {/* Main Dashboard */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-         {/* Calorie Ring & Summary */}
-         <div className="md:col-span-5 bg-black text-white p-8 rounded-sm shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-[320px]">
-            <div className="absolute top-0 right-0 p-32 bg-[#bef264] blur-[80px] opacity-10 rounded-full translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-            
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#bef264] mb-1">Calorie Balance</p>
-              <h3 className="text-5xl font-black tracking-tighter leading-none">{remainingCalories}</h3>
-              <p className="text-xs text-gray-400 font-bold uppercase mt-1">剩餘熱量 (Kcal)</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+         <div className="bg-black text-white p-8 md:p-10 shadow-2xl space-y-6">
+            <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest">Daily Calorie Balance</p>
+            <div className="flex items-baseline gap-4">
+              <span className="text-6xl font-black tracking-tighter">
+                {Math.max(0, (profile.dailyCalorieTarget || 2200) - dailyTotals.calories)}
+              </span>
+              <span className="text-gray-500 font-bold uppercase text-xs">剩餘熱量</span>
             </div>
-
-            <div className="space-y-4 relative z-10">
-               <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                 <span className="text-[10px] font-black uppercase text-gray-400">Target</span>
-                 <span className="font-mono font-bold">{targetCalories}</span>
-               </div>
-               <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                 <span className="text-[10px] font-black uppercase text-gray-400">Eaten</span>
-                 <span className="font-mono font-bold text-white">{dailyTotals.calories}</span>
-               </div>
-               <div className="flex justify-between items-center pb-2">
-                 <span className="text-[10px] font-black uppercase text-[#bef264] flex items-center gap-2"><Flame size={12}/> Burned</span>
-                 <span className="font-mono font-bold text-[#bef264]">{caloriesBurnedToday}</span>
-               </div>
-            </div>
-
-            <div className="w-full bg-white/10 h-1 mt-4">
-               <div 
-                 className="h-full bg-[#bef264] transition-all duration-1000"
-                 style={{ width: `${Math.min(100, (dailyTotals.calories / targetCalories) * 100)}%` }}
-               ></div>
+            <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+               <div className="h-full bg-[#bef264]" style={{ width: `${Math.min(100, (dailyTotals.calories / (profile.dailyCalorieTarget || 2200)) * 100)}%` }}></div>
             </div>
          </div>
-
-         {/* Macros Dashboard */}
-         <div className="md:col-span-7 bg-white border border-gray-100 p-8 shadow-sm rounded-sm flex flex-col justify-center space-y-8">
-            <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-50 pb-2">Macronutrient Matrix</h3>
-            
-            <div className="grid grid-cols-3 gap-4 text-center mb-4">
-               <div className="space-y-1">
-                  <div className="w-10 h-10 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-2"><Beef size={18}/></div>
-                  <p className="text-xl font-black text-black">{dailyTotals.protein}g</p>
-                  <p className="text-[9px] text-gray-400 font-bold uppercase">蛋白質 Protein</p>
-               </div>
-               <div className="space-y-1">
-                  <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-2"><Wheat size={18}/></div>
-                  <p className="text-xl font-black text-black">{dailyTotals.carbs}g</p>
-                  <p className="text-[9px] text-gray-400 font-bold uppercase">碳水 Carbs</p>
-               </div>
-               <div className="space-y-1">
-                  <div className="w-10 h-10 bg-yellow-50 text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-2"><Droplets size={18}/></div>
-                  <p className="text-xl font-black text-black">{dailyTotals.fat}g</p>
-                  <p className="text-[9px] text-gray-400 font-bold uppercase">脂肪 Fat</p>
-               </div>
-            </div>
-
-            <div className="space-y-4">
-              <ProgressBar label="蛋白質 PROTEIN" value={dailyTotals.protein} max={profile.macroTargets?.protein || 150} color="bg-orange-400" />
-              <ProgressBar label="碳水化合物 CARBS" value={dailyTotals.carbs} max={profile.macroTargets?.carbs || 200} color="bg-blue-400" />
-              <ProgressBar label="脂肪 FAT" value={dailyTotals.fat} max={profile.macroTargets?.fat || 60} color="bg-yellow-400" />
-            </div>
+         <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: '蛋白質', value: `${dailyTotals.protein}g`, icon: <Beef size={20}/>, color: 'text-orange-500' },
+              { label: '碳水', value: `${dailyTotals.carbs}g`, icon: <Wheat size={20}/>, color: 'text-blue-500' },
+              { label: '脂肪', value: `${dailyTotals.fat}g`, icon: <Droplets size={20}/>, color: 'text-yellow-500' },
+            ].map((stat, i) => (
+              <div key={i} className="bg-white border border-gray-100 p-6 flex flex-col items-center justify-center text-center shadow-sm">
+                 <div className={`${stat.color} mb-3`}>{stat.icon}</div>
+                 <span className="text-xl font-black text-black">{stat.value}</span>
+                 <span className="text-[10px] text-gray-400 font-bold uppercase mt-1">{stat.label}</span>
+              </div>
+            ))}
          </div>
       </div>
 
-      {/* Meals List */}
       <div className="space-y-4">
         {Object.entries(MEAL_TYPES).map(([type, meta]) => {
-          const meals = currentLog.meals[type as keyof typeof MEAL_TYPES];
-          const mealCals = meals.reduce((sum, m) => sum + m.macros.calories, 0);
+          const mealList = currentLog.meals[type as keyof typeof currentLog.meals] || [];
+          const mealCalories = mealList.reduce((s, m) => s + (m.macros?.calories || 0), 0);
           
           return (
-            <div key={type} className="bg-white border border-gray-100 rounded-sm shadow-sm hover:border-black/20 transition-all">
-               <div className="flex items-center justify-between p-5">
+            <div key={type} className="bg-white border border-gray-100 rounded-sm shadow-sm hover:border-black/20 transition-all overflow-hidden">
+               <div className="flex items-center justify-between p-6">
                   <div className="flex items-center gap-4">
-                     <div className="p-2 bg-gray-50 text-gray-500 rounded-full">{meta.icon}</div>
+                     <div className="p-3 bg-gray-50 text-gray-500 rounded-full">{meta.icon}</div>
                      <div>
-                       <h4 className="text-[11px] font-black uppercase tracking-widest text-black">{meta.label}</h4>
-                       <p className="text-[10px] text-gray-400 font-bold mt-0.5">{meals.length} Items • {mealCals} kcal</p>
+                       <h4 className="text-sm font-black text-black">{meta.label}</h4>
+                       <p className="text-xs text-gray-400 font-bold mt-1">
+                          {mealCalories} kcal
+                       </p>
                      </div>
                   </div>
                   <button 
-                    onClick={() => openAddModal(type as keyof typeof MEAL_TYPES)}
-                    className="w-8 h-8 flex items-center justify-center bg-black text-white hover:bg-[#bef264] hover:text-black rounded-full transition-all"
+                    onClick={() => { setActiveMealType(type as any); setShowAddModal(true); }}
+                    className="w-10 h-10 flex items-center justify-center bg-black text-white hover:bg-[#bef264] hover:text-black rounded-full transition-all"
                   >
-                    <Plus size={16} />
+                    <Plus size={20} />
                   </button>
                </div>
-               
-               {meals.length > 0 && (
-                 <div className="border-t border-gray-50 bg-[#fcfcfc]">
-                    {meals.map(meal => (
-                      <div key={meal.id} className="flex items-center justify-between p-4 px-6 hover:bg-white transition-colors border-b last:border-0 border-gray-50 group">
-                         <div className="flex items-center gap-4">
-                            {meal.image ? (
-                              <img src={meal.image} className="w-10 h-10 object-cover rounded-sm border border-gray-200" alt={meal.name} />
-                            ) : (
-                              <div className="w-10 h-10 bg-gray-100 flex items-center justify-center rounded-sm"><Utensils size={14} className="text-gray-300"/></div>
-                            )}
-                            <div>
-                               <p className="text-sm font-bold text-gray-900">{meal.name}</p>
-                               <div className="flex gap-2 text-[9px] text-gray-400 font-mono mt-0.5">
-                                  <span>{meal.macros.calories}kcal</span>
-                                  <span>P:{meal.macros.protein} C:{meal.macros.carbs} F:{meal.macros.fat}</span>
-                                </div>
-                            </div>
-                         </div>
-                         <button onClick={() => handleDeleteMeal(type as any, meal.id)} className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Trash2 size={14} />
-                         </button>
-                      </div>
-                    ))}
-                 </div>
+               {mealList.length > 0 && (
+                  <div className="bg-gray-50/50 border-t border-gray-100">
+                     {mealList.map(meal => (
+                       <div key={meal.id} className="flex items-center justify-between p-4 px-8 border-b last:border-0 border-gray-100 group">
+                          <div className="flex items-center gap-4">
+                             {meal.image && <img src={meal.image} className="w-10 h-10 object-cover rounded-sm" />}
+                             <div>
+                                <p className="text-sm font-bold text-gray-800">{meal.name}</p>
+                                <p className="text-[10px] text-gray-400 font-mono">P:{meal.macros.protein}g C:{meal.macros.carbs}g F:{meal.macros.fat}g</p>
+                             </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                             <span className="text-sm font-black">{meal.macros.calories} kcal</span>
+                             <button onClick={() => {
+                               const updatedLog = { 
+                                 ...currentLog, 
+                                 meals: { 
+                                   ...currentLog.meals, 
+                                   [type]: mealList.filter(m => m.id !== meal.id) 
+                                 } 
+                               };
+                               onUpdateDietLog(updatedLog);
+                             }} className="text-gray-200 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
+                          </div>
+                       </div>
+                     ))}
+                  </div>
                )}
             </div>
           );
         })}
       </div>
 
-      {/* Add Meal Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-6">
-           <div className="bg-white w-full max-w-xl md:rounded-sm animate-in slide-in-from-bottom-10 duration-300 border-t-4 border-[#bef264] max-h-[90vh] overflow-y-auto flex flex-col">
-              <div className="p-4 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10 shrink-0">
-                 <h3 className="text-xl font-black uppercase tracking-tight">新增紀錄 (ADD MEAL)</h3>
-                 <button onClick={() => setShowAddModal(false)}><X size={20} className="text-gray-400 hover:text-black"/></button>
-              </div>
-
-              {/* Mode Toggles */}
-              <div className="flex border-b border-gray-100 sticky top-[60px] bg-white z-10">
-                 <button 
-                   onClick={() => setAddMode('DATABASE')}
-                   className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 border-b-2 transition-all ${addMode === 'DATABASE' ? 'border-black text-black' : 'border-transparent text-gray-300'}`}
-                 >
-                    <Database size={14} /> 資料庫搜尋
-                 </button>
-                 <button 
-                   onClick={() => setAddMode('CAMERA')}
-                   className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 border-b-2 transition-all ${addMode === 'CAMERA' ? 'border-black text-black' : 'border-transparent text-gray-300'}`}
-                 >
-                    <Camera size={14} /> AI 拍照辨識
-                 </button>
-              </div>
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+           <div className="bg-white w-full max-w-lg border-4 border-black p-8 space-y-8 animate-in zoom-in duration-300 relative">
+              <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-black"><X size={24}/></button>
               
-              <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-                 {/* Mode: Database Search */}
-                 {addMode === 'DATABASE' && (
-                    <div className="space-y-6">
-                       <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-2 rounded-sm focus-within:border-black transition-all">
-                          <Search size={18} className="text-gray-400 ml-2" />
-                          <input 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="搜尋食物 (如: 雞蛋, 地瓜, 拿鐵...)"
-                            className="flex-1 bg-transparent p-2 text-sm font-bold outline-none"
-                            autoFocus
-                          />
-                       </div>
+              <div className="flex border-b border-gray-100">
+                 {['DATABASE', 'CAMERA', 'CUSTOM'].map(m => (
+                    <button 
+                      key={m} onClick={() => setAddMode(m as any)}
+                      className={`flex-1 py-4 text-xs font-black uppercase tracking-widest border-b-4 transition-all ${addMode === m ? 'border-black text-black' : 'border-transparent text-gray-300'}`}
+                    >
+                      {m === 'DATABASE' ? '資料庫' : m === 'CAMERA' ? 'AI 辨識' : '自定義'}
+                    </button>
+                 ))}
+              </div>
 
-                       {/* Quick Chips for Popular Items */}
-                       <div className="flex flex-wrap gap-2">
-                          {FOOD_DATABASE.slice(0, 5).map(item => (
-                             <button key={item.id} onClick={() => handleSelectFood(item)} className="px-3 py-1 bg-gray-100 hover:bg-black hover:text-white rounded-full text-[10px] font-bold transition-all">
-                                {item.name}
-                             </button>
-                          ))}
-                       </div>
-
-                       {/* Search Results */}
-                       <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar border border-gray-100 p-2 rounded-sm">
-                          {filteredFoods.length === 0 ? (
-                             <p className="text-center text-[10px] text-gray-400 py-4">無相符結果 / 請輸入關鍵字</p>
-                          ) : (
-                             filteredFoods.map(item => (
-                                <button 
-                                  key={item.id} 
-                                  onClick={() => handleSelectFood(item)}
-                                  className={`w-full flex justify-between items-center p-3 hover:bg-gray-50 text-left rounded-sm transition-all ${selectedFoodItem?.id === item.id ? 'bg-black text-white hover:bg-gray-800' : ''}`}
-                                >
-                                   <span className="text-sm font-bold">{item.name} <span className="text-[9px] opacity-60 ml-1">{item.unit}</span></span>
-                                   <span className="text-[10px] font-mono opacity-80">{item.macros.calories} kcal</span>
-                                </button>
-                             ))
-                          )}
-                       </div>
-
-                       {/* Portion Multiplier */}
-                       {selectedFoodItem && (
-                          <div className="space-y-2 p-4 bg-gray-50 border border-gray-100 rounded-sm">
-                             <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">份量調整 (MULTIPLIER)</p>
-                             <div className="flex justify-between gap-2">
-                                {[0.25, 0.5, 1, 1.5, 2].map(m => (
-                                   <button 
-                                     key={m} 
-                                     onClick={() => handleMultiplierChange(m)}
-                                     className={`flex-1 py-2 text-[10px] font-black border transition-all ${portionMultiplier === m ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-200'}`}
-                                   >
-                                      x{m}
-                                   </button>
-                                ))}
-                             </div>
-                          </div>
-                       )}
-                    </div>
-                 )}
-
-                 {/* Mode: Camera AI */}
-                 {addMode === 'CAMERA' && (
+              {isAnalyzing ? (
+                 <TacticalLoader type="DIET" title="David 正在解析補給品矩陣" />
+              ) : (
+                <div className="space-y-6">
+                   {addMode === 'CAMERA' && (
                      <div 
                        onClick={() => fileInputRef.current?.click()}
-                       className="w-full aspect-video bg-gray-50 border-2 border-dashed border-gray-200 hover:border-black cursor-pointer flex flex-col items-center justify-center transition-all group overflow-hidden relative"
+                       className="w-full aspect-video bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-black transition-all group overflow-hidden"
                      >
-                        {newMealImage ? (
-                           <>
-                             <img src={newMealImage} className="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" alt="Preview" />
-                             {isAnalyzing && (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white backdrop-blur-sm">
-                                   <Loader2 className="animate-spin mb-2" size={32} />
-                                   <p className="text-[10px] font-black uppercase tracking-widest">AI Analyzing...</p>
-                                </div>
-                             )}
-                           </>
-                        ) : (
+                        {newMealImage ? <img src={newMealImage} className="w-full h-full object-cover" /> : (
                            <div className="text-center space-y-2">
-                              <Camera className="mx-auto text-gray-300 group-hover:text-black transition-colors" size={32} />
-                              <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">點擊拍照 / 上傳圖片</p>
+                              <Camera className="mx-auto text-gray-300 group-hover:text-black" size={32} />
+                              <p className="text-xs font-black text-gray-400">點擊上傳食物照片啟動 AI 辨識</p>
                            </div>
                         )}
                         <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
                      </div>
-                 )}
+                   )}
 
-                 {/* Manual Edit Fields (Pre-filled by AI or DB) */}
-                 <div className="space-y-4 pt-4 border-t border-gray-100">
-                    <div className="space-y-1">
-                       <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">名稱 NAME</label>
-                       <input value={newMealName} onChange={e => setNewMealName(e.target.value)} className="w-full bg-gray-50 border-b border-gray-200 p-3 font-bold focus:border-black outline-none" placeholder="例如: 雞胸肉沙拉" />
-                    </div>
-                    
-                    <div className="grid grid-cols-4 gap-2">
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">熱量</label>
-                          <input type="number" value={newMealCals} onChange={e => setNewMealCals(e.target.value)} className="w-full bg-gray-50 border-b border-gray-200 p-2 font-mono font-black focus:border-black outline-none text-center" placeholder="0" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black uppercase text-orange-400 tracking-widest">蛋白 P</label>
-                          <input type="number" value={newMealP} onChange={e => setNewMealP(e.target.value)} className="w-full bg-gray-50 border-b border-gray-200 p-2 font-mono font-black focus:border-black outline-none text-center" placeholder="0" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black uppercase text-blue-400 tracking-widest">碳水 C</label>
-                          <input type="number" value={newMealC} onChange={e => setNewMealC(e.target.value)} className="w-full bg-gray-50 border-b border-gray-200 p-2 font-mono font-black focus:border-black outline-none text-center" placeholder="0" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black uppercase text-yellow-400 tracking-widest">脂肪 F</label>
-                          <input type="number" value={newMealF} onChange={e => setNewMealF(e.target.value)} className="w-full bg-gray-50 border-b border-gray-200 p-2 font-mono font-black focus:border-black outline-none text-center" placeholder="0" />
-                       </div>
-                    </div>
-                 </div>
+                   {addMode === 'DATABASE' && (
+                      <div className="space-y-4">
+                         <div className="flex items-center gap-2 bg-gray-50 border p-3">
+                            <Search size={18} className="text-gray-400" />
+                            <input 
+                              placeholder="搜尋現有食物..." 
+                              value={searchQuery}
+                              onChange={e => setSearchQuery(e.target.value)}
+                              className="bg-transparent flex-1 text-sm font-bold outline-none"
+                            />
+                         </div>
+                         <div className="max-h-40 overflow-y-auto space-y-1">
+                            {FOOD_DATABASE.filter(f => f.name.includes(searchQuery)).map(f => (
+                               <button 
+                                 key={f.id} onClick={() => { setNewMealName(f.name); setNewMealCals(f.macros.calories.toString()); setNewMealP(f.macros.protein.toString()); setNewMealC(f.macros.carbs.toString()); setNewMealF(f.macros.fat.toString()); setAddMode('CUSTOM'); }}
+                                 className="w-full text-left p-3 text-sm font-bold hover:bg-gray-50 border-b border-gray-50 flex justify-between"
+                               >
+                                  <span>{f.name}</span>
+                                  <span className="text-gray-400">{f.macros.calories} kcal</span>
+                               </button>
+                            ))}
+                         </div>
+                      </div>
+                   )}
 
-                 <button 
-                   onClick={handleSaveMeal}
-                   disabled={!newMealName}
-                   className="w-full bg-black text-[#bef264] py-4 font-black text-xs tracking-[0.4em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-lg disabled:opacity-50"
-                 >
-                    確認加入 CONFIRM
-                 </button>
-              </div>
+                   <div className="space-y-4">
+                      <div className="space-y-1">
+                         <label className="text-[10px] font-black text-gray-400 uppercase">食物名稱 Name</label>
+                         <input value={newMealName} onChange={e => setNewMealName(e.target.value)} className="w-full bg-gray-50 p-4 text-base font-bold outline-none border-b-2 border-transparent focus:border-black" />
+                      </div>
+                      
+                      <div className="grid grid-cols-4 gap-4">
+                         <div className="space-y-1">
+                            <label className="text-[10px] font-black text-gray-400 uppercase">Kcal</label>
+                            <input value={newMealCals} onChange={e => setNewMealCals(e.target.value)} className="w-full bg-gray-50 p-3 font-mono font-black text-center outline-none border-b-2 border-transparent focus:border-black" />
+                         </div>
+                         <div className="space-y-1">
+                            <label className="text-[10px] font-black text-gray-400 uppercase">P</label>
+                            <input value={newMealP} onChange={e => setNewMealP(e.target.value)} className="w-full bg-gray-50 p-3 font-mono font-black text-center outline-none border-b-2 border-transparent focus:border-black" />
+                         </div>
+                         <div className="space-y-1">
+                            <label className="text-[10px] font-black text-gray-400 uppercase">C</label>
+                            <input value={newMealC} onChange={e => setNewMealC(e.target.value)} className="w-full bg-gray-50 p-3 font-mono font-black text-center outline-none border-b-2 border-transparent focus:border-black" />
+                         </div>
+                         <div className="space-y-1">
+                            <label className="text-[10px] font-black text-gray-400 uppercase">F</label>
+                            <input value={newMealF} onChange={e => setNewMealF(e.target.value)} className="w-full bg-gray-50 p-3 font-mono font-black text-center outline-none border-b-2 border-transparent focus:border-black" />
+                         </div>
+                      </div>
+                   </div>
+
+                   <button 
+                     onClick={handleSaveMeal}
+                     disabled={!newMealName}
+                     className="w-full bg-black text-[#bef264] py-5 font-black text-xs tracking-[0.4em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-xl disabled:opacity-20"
+                   >
+                      儲存戰術補給 SAVE MEAL
+                   </button>
+                </div>
+              )}
            </div>
         </div>
       )}
