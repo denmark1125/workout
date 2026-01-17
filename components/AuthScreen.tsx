@@ -117,7 +117,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
     onRegister(profile, regWeight);
   };
 
-  // 1. LOGIN SCREEN (Visual matching the screenshot)
+  // 1. LOGIN SCREEN
   if (mode === 'LOGIN') {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -147,7 +147,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
                      value={loginId}
                      onChange={e => setLoginId(e.target.value)}
                      className="w-full bg-[#f9fafb] p-4 font-bold text-gray-900 outline-none focus:bg-gray-100 transition-colors border-b-2 border-transparent focus:border-black placeholder:text-gray-300 placeholder:font-bold"
-                     placeholder="Enter Member ID"
+                     placeholder="輸入帳號"
                    />
                 </div>
                 
@@ -201,30 +201,21 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
     );
   }
 
-  // 2. INITIALIZATION SCREEN (Loading Simulation)
+  // 2. INITIALIZATION SCREEN
   if (isInitializing) {
      return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 relative overflow-hidden">
-           {/* Scanlines */}
            <div className="absolute inset-0 scanline opacity-10 pointer-events-none"></div>
-
            <div className="w-full max-w-md space-y-8 text-center relative z-10">
               <Loader2 className="w-16 h-16 text-[#bef264] animate-spin mx-auto" />
               <div className="space-y-2">
                  <h2 className="text-3xl font-black text-white tracking-tighter uppercase">System Initialization</h2>
                  <p className="text-[10px] font-mono text-[#bef264] tracking-[0.2em] animate-pulse">{initStatusText}</p>
               </div>
-              
               <div className="w-full bg-gray-900 h-1 rounded-full overflow-hidden">
                  <div className="h-full bg-[#bef264] transition-all duration-100 ease-out shadow-[0_0_10px_#bef264]" style={{ width: `${initProgress}%` }}></div>
               </div>
               <p className="text-5xl font-mono font-black text-white">{initProgress}%</p>
-           </div>
-           
-           {/* Background Deco */}
-           <div className="absolute inset-0 pointer-events-none opacity-20">
-              <div className="absolute top-1/2 left-0 w-full h-[1px] bg-[#bef264]"></div>
-              <div className="absolute top-0 left-1/2 h-full w-[1px] bg-[#bef264]"></div>
            </div>
         </div>
      );
@@ -235,20 +226,17 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
      return (
         <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 relative">
            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
-
            <div className="w-full max-w-md bg-white border-4 border-black p-8 shadow-2xl space-y-8 animate-in slide-in-from-bottom-10 duration-500 relative z-10">
               <div className="text-center space-y-2 border-b-2 border-gray-100 pb-6">
                  <div className="inline-flex p-3 bg-[#bef264] text-black rounded-full mb-2"><CheckCircle size={32} /></div>
                  <h2 className="text-2xl font-black uppercase tracking-tighter">Matrix Calibration Complete</h2>
                  <p className="text-xs text-gray-500 font-bold">系統已根據您的數值完成優化</p>
               </div>
-
               <div className="space-y-6">
                  <div className="bg-black text-white p-6 text-center shadow-lg">
                     <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-1">Daily Target (TDEE)</p>
                     <p className="text-5xl font-black font-mono tracking-tighter">{calculatedResult.dailyCalorieTarget}<span className="text-sm ml-1 text-gray-500">kcal</span></p>
                  </div>
-
                  <div className="grid grid-cols-3 gap-2">
                     <div className="bg-gray-50 border border-gray-100 p-4 text-center">
                        <p className="text-[9px] font-black uppercase text-gray-400 mb-1">Protein</p>
@@ -263,12 +251,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
                        <p className="text-xl font-black">{calculatedResult.macroTargets.fat}g</p>
                     </div>
                  </div>
-                 
-                 <div className="p-4 bg-gray-50 border-l-4 border-black text-xs text-gray-600 font-bold leading-relaxed">
-                    David 教練：這些數值是你的起始戰術配置。隨著你輸入更多訓練與體態數據，系統將會持續動態調整。
-                 </div>
               </div>
-
               <button onClick={handleFinalRegister} className="w-full bg-black text-[#bef264] py-5 font-black text-xs tracking-[0.2em] uppercase hover:bg-[#bef264] hover:text-black transition-colors flex items-center justify-center gap-2 shadow-lg">
                  進入系統 (ENTER MATRIX) <ArrowRight size={14} />
               </button>
@@ -281,11 +264,10 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 relative">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
-
       <div className="w-full max-w-md relative z-10">
         <div className="mb-8 flex items-center justify-between">
            <button onClick={() => regStep > 1 ? setRegStep(regStep - 1) : setMode('LOGIN')} className="text-xs font-black uppercase tracking-widest text-gray-400 hover:text-black">
-              Back
+              返回
            </button>
            <div className="flex gap-1">
               {[1,2,3,4,5,6].map(s => (
@@ -294,48 +276,43 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
            </div>
            <span className="text-xs font-black font-mono">STEP {regStep}/06</span>
         </div>
-
         <div className="bg-white border-2 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] relative min-h-[450px] flex flex-col">
-           
-           {/* Step 1: Credentials */}
            {regStep === 1 && (
              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                 <h2 className="text-2xl font-black uppercase tracking-tighter">建立識別代碼</h2>
                 <div className="space-y-4">
                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Member ID (Unique)</label>
-                      <input value={regId} onChange={e => setRegId(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-100 focus:border-black p-4 font-bold outline-none" placeholder="使用者帳號" />
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">使用者 ID (帳號唯一)</label>
+                      <input value={regId} onChange={e => setRegId(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-100 focus:border-black p-4 font-bold outline-none" placeholder="輸入帳號" />
                    </div>
                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Password</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">設定密碼</label>
                       <input type="password" value={regPass} onChange={e => setRegPass(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-100 focus:border-black p-4 font-bold outline-none" placeholder="設定密碼" />
                    </div>
                 </div>
                 <div className="pt-4">
-                  <button onClick={() => { if(regId && regPass) setRegStep(2); }} disabled={!regId || !regPass} className="w-full bg-black text-white py-4 font-black text-xs uppercase hover:bg-gray-800 disabled:opacity-50">Next Step</button>
+                  <button onClick={() => { if(regId && regPass) setRegStep(2); }} disabled={!regId || !regPass} className="w-full bg-black text-white py-4 font-black text-xs uppercase hover:bg-gray-800 disabled:opacity-50">下一步</button>
                 </div>
              </div>
            )}
-
-           {/* Step 2: Bio */}
            {regStep === 2 && (
              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                 <h2 className="text-2xl font-black uppercase tracking-tighter">生理數值輸入</h2>
                 <div className="space-y-4">
                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Display Name</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">暱稱</label>
                       <input value={regName} onChange={e => setRegName(e.target.value)} className="w-full bg-gray-50 border-b-2 border-gray-200 focus:border-black p-3 font-bold outline-none" placeholder="暱稱" />
                    </div>
                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Gender</label>
+                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">性別</label>
                          <div className="flex border-2 border-gray-100">
-                            <button onClick={() => setRegGender('M')} className={`flex-1 py-3 text-sm font-black ${regGender === 'M' ? 'bg-black text-white' : 'bg-white text-gray-400'}`}>MALE</button>
-                            <button onClick={() => setRegGender('F')} className={`flex-1 py-3 text-sm font-black ${regGender === 'F' ? 'bg-black text-white' : 'bg-white text-gray-400'}`}>FEMALE</button>
+                            <button onClick={() => setRegGender('M')} className={`flex-1 py-3 text-sm font-black ${regGender === 'M' ? 'bg-black text-white' : 'bg-white text-gray-400'}`}>男</button>
+                            <button onClick={() => setRegGender('F')} className={`flex-1 py-3 text-sm font-black ${regGender === 'F' ? 'bg-black text-white' : 'bg-white text-gray-400'}`}>女</button>
                          </div>
                       </div>
                       <div className="space-y-2">
-                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Age</label>
+                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">年齡</label>
                          <div className="relative">
                             <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
                             <input type="number" value={regAge} onChange={e => setRegAge(parseInt(e.target.value))} className="w-full bg-gray-50 p-3 pl-10 font-bold outline-none" />
@@ -344,14 +321,14 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
                    </div>
                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Height (cm)</label>
+                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">身高 (cm)</label>
                          <div className="relative">
                             <Ruler size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
                             <input type="number" value={regHeight} onChange={e => setRegHeight(parseInt(e.target.value))} className="w-full bg-gray-50 p-3 pl-10 font-bold outline-none" />
                          </div>
                       </div>
                       <div className="space-y-2">
-                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Weight (kg)</label>
+                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">體重 (kg)</label>
                          <div className="relative">
                             <Scale size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
                             <input type="number" step="0.1" value={regWeight} onChange={e => setRegWeight(parseFloat(e.target.value))} className="w-full bg-gray-50 p-3 pl-10 font-bold outline-none" />
@@ -359,112 +336,21 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onRegister, loginError
                       </div>
                    </div>
                 </div>
-                <button onClick={() => setRegStep(3)} className="w-full bg-black text-white py-4 font-black text-xs uppercase hover:bg-gray-800 mt-4">Next Step</button>
+                <button onClick={() => setRegStep(3)} className="w-full bg-black text-white py-4 font-black text-xs uppercase hover:bg-gray-800 mt-4">下一步</button>
              </div>
            )}
-
-           {/* Step 3: Goal */}
-           {regStep === 3 && (
-             <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                <h2 className="text-2xl font-black uppercase tracking-tighter">選擇主要戰略目標</h2>
-                <div className="space-y-3 h-64 overflow-y-auto custom-scrollbar pr-2">
-                   {Object.entries(GoalMetadata).filter(([k]) => k !== 'CUSTOM').map(([key, meta]) => (
-                      <button 
-                        key={key} 
-                        onClick={() => setRegGoal(key as FitnessGoal)}
-                        className={`w-full text-left p-4 border-2 transition-all group ${regGoal === key ? 'border-black bg-black text-white' : 'border-gray-100 hover:border-black'}`}
-                      >
-                         <div className="flex justify-between items-center mb-1">
-                            <span className="font-black uppercase tracking-tight">{meta.label}</span>
-                            {regGoal === key && <CheckCircle size={16} className="text-[#bef264]"/>}
-                         </div>
-                         <p className={`text-xs ${regGoal === key ? 'text-gray-400' : 'text-gray-500'}`}>{meta.focus}</p>
-                      </button>
-                   ))}
-                </div>
-                <button onClick={() => setRegStep(4)} className="w-full bg-black text-white py-4 font-black text-xs uppercase hover:bg-gray-800">Next Step</button>
-             </div>
-           )}
-
-           {/* Step 4: Activity Level */}
-           {regStep === 4 && (
-             <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                <div className="flex items-center gap-3">
-                   <Activity size={24} className="text-black" />
-                   <h2 className="text-2xl font-black uppercase tracking-tighter">日常活動量</h2>
-                </div>
-                <p className="text-xs text-gray-500 font-bold">這決定了您的 TDEE 基礎係數。</p>
-                
-                <div className="space-y-3 h-60 overflow-y-auto custom-scrollbar pr-2">
-                   {activityOptions.map((opt) => (
-                      <button 
-                        key={opt.val} 
-                        onClick={() => setRegActivity(opt.val)}
-                        className={`w-full text-left p-4 border-2 transition-all ${regActivity === opt.val ? 'border-black bg-black text-white' : 'border-gray-100 hover:border-gray-300'}`}
-                      >
-                         <div className="flex justify-between items-center mb-1">
-                            <span className="font-black uppercase">{opt.label}</span>
-                            {regActivity === opt.val && <Zap size={14} className="text-[#bef264] fill-current"/>}
-                         </div>
-                         <p className={`text-xs ${regActivity === opt.val ? 'text-gray-400' : 'text-gray-500'}`}>{opt.desc}</p>
-                      </button>
-                   ))}
-                </div>
-                <button onClick={() => setRegStep(5)} className="w-full bg-black text-white py-4 font-black text-xs uppercase hover:bg-gray-800">Next Step</button>
-             </div>
-           )}
-
-           {/* Step 5: Diet */}
-           {regStep === 5 && (
-             <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                <div className="flex items-center gap-3">
-                   <Utensils size={24} className="text-black" />
-                   <h2 className="text-2xl font-black uppercase tracking-tighter">飲食偏好</h2>
-                </div>
-                <p className="text-xs text-gray-500 font-bold">AI 將根據此偏好調整蛋白質與碳水建議。</p>
-                
-                <div className="space-y-3 h-60 overflow-y-auto custom-scrollbar pr-2">
-                   {dietOptions.map((opt) => (
-                      <button 
-                        key={opt.val} 
-                        onClick={() => setRegDiet(opt.val)}
-                        className={`w-full text-left p-4 border-2 transition-all ${regDiet === opt.val ? 'border-black bg-black text-white' : 'border-gray-100 hover:border-gray-300'}`}
-                      >
-                         <div className="flex justify-between items-center mb-1">
-                            <span className="font-black uppercase">{opt.label}</span>
-                            {regDiet === opt.val && <CheckCircle size={14} className="text-[#bef264]"/>}
-                         </div>
-                         <p className={`text-xs ${regDiet === opt.val ? 'text-gray-400' : 'text-gray-500'}`}>{opt.desc}</p>
-                      </button>
-                   ))}
-                </div>
-                <button onClick={() => setRegStep(6)} className="w-full bg-black text-white py-4 font-black text-xs uppercase hover:bg-gray-800">Next Step</button>
-             </div>
-           )}
-
-           {/* Step 6: Confirmation & Start Init */}
            {regStep === 6 && (
              <div className="space-y-8 animate-in slide-in-from-right-4 duration-300 flex-1 flex flex-col justify-center">
                 <div className="text-center space-y-4">
                    <Target className="w-16 h-16 mx-auto text-black" />
                    <h2 className="text-3xl font-black uppercase tracking-tighter">準備啟動</h2>
-                   <p className="text-sm text-gray-500 font-bold px-4">
-                      我們已收集完畢所有必要參數。點擊下方按鈕，Matrix 將開始運算您的個人化生理模型。
-                   </p>
+                   <p className="text-sm text-gray-500 font-bold px-4">所有參數已就緒。點擊下方按鈕，Matrix 將運算您的生理戰術模型。</p>
                 </div>
-                
-                <div className="bg-gray-50 p-6 space-y-2 border border-gray-100 text-sm font-bold text-gray-600">
-                   <div className="flex justify-between"><span>目標:</span> <span className="text-black">{GoalMetadata[regGoal].label}</span></div>
-                   <div className="flex justify-between"><span>活動:</span> <span className="text-black">{activityOptions.find(a=>a.val===regActivity)?.label}</span></div>
-                   <div className="flex justify-between"><span>飲食:</span> <span className="text-black">{dietOptions.find(d=>d.val===regDiet)?.label}</span></div>
-                </div>
-
                 <button onClick={startInitialization} className="w-full bg-[#bef264] text-black py-5 font-black text-xs tracking-[0.3em] uppercase hover:bg-black hover:text-[#bef264] transition-all shadow-xl animate-pulse">
-                   INITIALIZE SYSTEM
+                   啟動系統 INITIALIZE
                 </button>
              </div>
            )}
-
         </div>
       </div>
     </div>

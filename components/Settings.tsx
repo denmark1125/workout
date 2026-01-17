@@ -171,7 +171,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
     <div className="max-w-7xl mx-auto space-y-10 pb-32 overflow-hidden px-2 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-gray-100 pb-8 gap-6">
         <div>
-          <p className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-[0.4em] mb-2">Protocol Calibration</p>
+          <p className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.4em] mb-2">Protocol Calibration</p>
           <h2 className="text-4xl md:text-5xl font-black text-black tracking-tighter uppercase leading-none">系統設定 (SETTINGS)</h2>
         </div>
         <button 
@@ -310,12 +310,12 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
                    className="flex items-center gap-2 text-[9px] font-black uppercase bg-black text-[#bef264] px-3 py-1.5 hover:bg-lime-400 hover:text-black transition-all disabled:opacity-50"
                 >
                    {isCalibrating ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
-                   {isCalibrating ? 'AI CALCULATING...' : 'AI 戰略校準'}
+                   {isCalibrating ? 'AI CALCULATING...' : 'AI 戰術校準'}
                 </button>
              </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* 關鍵參數設定 (修復部分) */}
+                {/* 關鍵參數設定 */}
                 <div className="space-y-6">
                    <div className="space-y-2">
                       <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">日常活動量 (ACTIVITY LEVEL)</label>
@@ -343,37 +343,37 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
                       <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">每日熱量目標 (TDEE/TARGET)</label>
                       <input 
                          type="number"
-                         value={profile.dailyCalorieTarget}
+                         value={profile.dailyCalorieTarget || 0}
                          onChange={(e) => handleChange('dailyCalorieTarget', parseInt(e.target.value))}
                          className="w-full bg-white border-b-2 border-gray-200 px-3 py-2 text-lg font-black font-mono focus:border-black outline-none"
                       />
                    </div>
                 </div>
                 
-                {/* 宏量營養素 */}
+                {/* 三大營養素 */}
                 <div className="space-y-4 bg-gray-50 p-6 border border-gray-100">
-                   <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2">宏量營養素戰術 (MACROS)</p>
+                   <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2">三大營養素比例 (MACROS)</p>
                    <div className="space-y-4">
                       <div className="space-y-1">
                          <div className="flex justify-between">
                             <label className="text-[8px] font-black uppercase text-orange-400">蛋白質 Protein</label>
-                            <span className="text-[10px] font-bold">{profile.macroTargets?.protein}g</span>
+                            <span className="text-[10px] font-bold">{profile.macroTargets?.protein ?? 0}g</span>
                          </div>
-                         <input type="range" min="50" max="300" step="5" value={profile.macroTargets?.protein} onChange={(e) => handleDeepChange('macroTargets', 'protein', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                         <input type="range" min="50" max="300" step="5" value={profile.macroTargets?.protein || 50} onChange={(e) => handleDeepChange('macroTargets', 'protein', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
                       </div>
                       <div className="space-y-1">
                          <div className="flex justify-between">
                             <label className="text-[8px] font-black uppercase text-blue-400">碳水 Carbs</label>
-                            <span className="text-[10px] font-bold">{profile.macroTargets?.carbs}g</span>
+                            <span className="text-[10px] font-bold">{profile.macroTargets?.carbs ?? 0}g</span>
                          </div>
-                         <input type="range" min="0" max="500" step="5" value={profile.macroTargets?.carbs} onChange={(e) => handleDeepChange('macroTargets', 'carbs', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                         <input type="range" min="0" max="500" step="5" value={profile.macroTargets?.carbs || 0} onChange={(e) => handleDeepChange('macroTargets', 'carbs', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
                       </div>
                       <div className="space-y-1">
                          <div className="flex justify-between">
                             <label className="text-[8px] font-black uppercase text-yellow-400">脂肪 Fat</label>
-                            <span className="text-[10px] font-bold">{profile.macroTargets?.fat}g</span>
+                            <span className="text-[10px] font-bold">{profile.macroTargets?.fat ?? 0}g</span>
                          </div>
-                         <input type="range" min="0" max="150" step="5" value={profile.macroTargets?.fat} onChange={(e) => handleDeepChange('macroTargets', 'fat', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                         <input type="range" min="0" max="150" step="5" value={profile.macroTargets?.fat || 0} onChange={(e) => handleDeepChange('macroTargets', 'fat', parseInt(e.target.value))} className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
                       </div>
                    </div>
                 </div>

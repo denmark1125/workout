@@ -15,14 +15,15 @@ import Onboarding from './components/Onboarding';
 import NutritionDeck from './components/NutritionDeck'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog, WeeklyReportData } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
-import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; 
-import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
-import { REWARDS_DATABASE, ACHIEVEMENT_REWARDS } from './utils/rewardAssets';
-import { Loader2, AlertTriangle, LogOut, Terminal, Cloud, CloudOff, Share, ArrowUpSquare } from 'lucide-react';
+import { getDailyBriefing, getLocalDavidGreeting } from './services/geminiService'; 
+import { getLocalTimestamp } from './utils/calculations';
+import { REWARDS_DATABASE } from './utils/rewardAssets';
+import { Loader2, Terminal, Cloud, CloudOff, AlertTriangle, ShieldOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
   const [isAdmin, setIsAdmin] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
@@ -30,18 +31,13 @@ const App: React.FC = () => {
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [pendingReward, setPendingReward] = useState<any>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showTimeoutWarning, setShowTimeoutWarning] = useState<string | null>(null);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
-
+  
   const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
-  
   const [davidGreeting, setDavidGreeting] = useState<string>("");
   const [isGreetingLoading, setIsGreetingLoading] = useState(false);
   
-  // Ref to prevent double-firing in Strict Mode
   const fetchingGreetingRef = useRef(false);
-  const timeoutRef = useRef<any>(null);
 
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => {
     return localStorage.getItem('matrix_active_user');
@@ -76,81 +72,19 @@ const App: React.FC = () => {
   const [dietLogs, setDietLogs] = useState<DietLog[]>([]);
   const [reports, setReports] = useState<WeeklyReportData[]>([]);
 
+  // 偵測資料庫連線狀態
   useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const resetTimer = () => {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => handleLogout(true), 3 * 60 * 60 * 1000); 
-      
-      const warning1 = setTimeout(() => setShowTimeoutWarning("1.5小時"), 1.5 * 60 * 60 * 1000);
-      const warning2 = setTimeout(() => setShowTimeoutWarning("2小時"), 2 * 60 * 60 * 1000);
-
-      const events = ['mousemove', 'keydown', 'touchstart'];
-      const eventHandler = () => {
-        clearTimeout(warning1);
-        clearTimeout(warning2);
-        resetTimer();
-        events.forEach(event => window.removeEventListener(event, eventHandler));
-      };
-      
-      events.forEach(event => window.addEventListener(event, eventHandler, { once: true }));
-    };
-
-    resetTimer();
-
-    return () => {
-      clearTimeout(timeoutRef.current);
-    };
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    setIsAdmin(currentMemberId === 'admin_roots' || profile.role === 'admin');
-    const checkDb = () => setDbConnected(db !== null);
-    checkDb();
-    const interval = setInterval(checkDb, 5000);
+    const interval = setInterval(() => setDbConnected(db !== null), 3000);
     return () => clearInterval(interval);
-  }, [currentMemberId, profile.role]);
+  }, []);
 
-  // David Greeting with Debounce Ref
-  useEffect(() => {
-    if (isAuthenticated && !davidGreeting && !fetchingGreetingRef.current) {
-      fetchingGreetingRef.current = true;
-      setIsGreetingLoading(true);
-      getDavidGreeting(profile)
-        .then(msg => setDavidGreeting(msg))
-        .catch(() => setDavidGreeting(`David 教練：${profile.name}，系統已就緒。`))
-        .finally(() => {
-           setIsGreetingLoading(false);
-           fetchingGreetingRef.current = false;
-        });
-    }
-  }, [isAuthenticated, profile.name]);
-
-  // Check for PWA Installation (Mobile Web only)
-  useEffect(() => {
-    if (isAuthenticated) {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-      // Simple check: iOS users who are not in standalone mode
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      
-      if (isIOS && !isStandalone) {
-         // Show only once per session
-         if (!sessionStorage.getItem('matrix_install_prompt_seen')) {
-            setShowInstallPrompt(true);
-            sessionStorage.setItem('matrix_install_prompt_seen', 'true');
-         }
-      }
-    }
-  }, [isAuthenticated]);
-
-  // 1. 下載資料 (Data Fetching with Smart Merge)
+  // 登錄後初始化雲端數據
   useEffect(() => {
     const initializeCloudData = async () => {
       if (!isAuthenticated || !currentMemberId) return;
       setIsSyncing(true);
       try {
-        const [p, m, l, ph, dlogs, rpts] = await Promise.all([
+        const [p, m, l, ph, d, r] = await Promise.all([
           fetchFromCloud('profiles', currentMemberId),
           fetchFromCloud('metrics', currentMemberId),
           fetchFromCloud('logs', currentMemberId),
@@ -159,316 +93,156 @@ const App: React.FC = () => {
           fetchFromCloud('reports', currentMemberId)
         ]);
         
-        if (p) {
-          const today = new Date();
-          const todayStr = today.toLocaleDateString('en-CA');
-          let updatedProfile = { ...p };
-          if (!updatedProfile.role) updatedProfile.role = 'user';
-          if (currentMemberId === 'admin_roots') updatedProfile.role = 'admin';
-          if (!updatedProfile.privacySettings) updatedProfile.privacySettings = { syncPhysiqueImages: true, syncMetrics: true };
-          if (updatedProfile.hasCompletedOnboarding === false) setShowOnboarding(true);
-          if (!updatedProfile.dailyCalorieTarget) updatedProfile.dailyCalorieTarget = 2200;
-
-          const lastLogin = new Date(updatedProfile.lastLoginDate || todayStr);
-          const diffDays = (today.getTime() - lastLogin.getTime()) / (1000 * 3600 * 24);
-          
-          if (diffDays >= 90) {
-            if(confirm("David 教練：偵測到您已超過90天未同步數據。需要重新啟動戰術教學嗎？")) setShowOnboarding(true);
-          }
-
-          const hasClaimedToday = updatedProfile.lastRewardClaimDate === todayStr;
-          if (!hasClaimedToday) {
-             const rewardIndex = (updatedProfile.collectedRewardIds?.length || 0) % REWARDS_DATABASE.length;
-             setPendingReward(REWARDS_DATABASE[rewardIndex]);
-             setShowRewardModal(true);
-
-             setIsBriefingLoading(true);
-             getDailyBriefing(updatedProfile, updatedProfile.loginStreak || 1)
-               .then(briefing => setDailyBriefing(briefing))
-               .finally(() => setIsBriefingLoading(false));
-          }
-
-          if (updatedProfile.lastLoginDate !== todayStr) {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = yesterday.toLocaleDateString('en-CA');
-            if (updatedProfile.lastLoginDate === yesterdayStr) {
-              updatedProfile.loginStreak = (updatedProfile.loginStreak || 0) + 1;
-            } else {
-              updatedProfile.loginStreak = 1;
-            }
-            updatedProfile.lastLoginDate = todayStr;
-            
-            syncToCloud('profiles', updatedProfile, currentMemberId);
-          }
-          setProfile(updatedProfile);
-        }
-        
+        if (p) setProfile(p);
         if (m) setMetrics(m);
         if (l) setLogs(l);
         if (ph) setPhysiqueRecords(ph);
-        if (dlogs) setDietLogs(dlogs);
-        if (rpts) setReports(rpts);
-        
-      } catch (e) { 
-        console.warn("同步失敗 (可能為離線狀態，已使用本地緩存)", e); 
-      } finally { 
+        if (d) setDietLogs(d);
+        if (r) setReports(r);
+
+      } catch (e) {
+        console.error("初始化雲端資料失敗", e);
+      } finally {
         setIsSyncing(false);
-        setIsDataLoaded(true); 
+        setIsDataLoaded(true);
       }
     };
     initializeCloudData();
   }, [isAuthenticated, currentMemberId]);
 
-  // 2. 自動上傳 (Auto-Sync) with Hybrid Privacy Logic
+  // 核心自動同步效應：數據變動時即時同步
   useEffect(() => {
-    if (!isDataLoaded || !isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
-    
-    const timer = setTimeout(() => {
-      // 1. Profile: Always Sync (Metadata)
-      syncToCloud('profiles', profile, currentMemberId, true);
+    if (!isDataLoaded || !isAuthenticated || !currentMemberId) return;
 
-      // 2. Data Categories: Controlled by Sync Metrics/Data switch
-      // User request: "Unless privacy is closed, then stop accessing diet/fitness/body values"
-      // We interpret syncMetrics as the master switch for data.
-      const shouldSyncData = profile.privacySettings?.syncMetrics ?? true;
-      syncToCloud('metrics', metrics, currentMemberId, shouldSyncData);
-      syncToCloud('logs', logs, currentMemberId, shouldSyncData);
-      syncToCloud('diet', dietLogs, currentMemberId, shouldSyncData);
-      syncToCloud('reports', reports, currentMemberId, shouldSyncData);
+    const performSync = async () => {
+      const canSync = profile.privacySettings?.syncMetrics ?? true;
       
-      // 3. Physique: Special Hybrid Handling
-      // User request: "Store locally only, do not force upload (unless privacy closed)"
-      // Strategy: 
-      // - We ALWAYS save full data (with images) to LocalStorage via syncToCloud's first step.
-      // - We create a 'stripped' version (no images) for the cloud.
-      // - If privacy is ON (syncPhysiqueImages=true), we upload the STRIPPED version to cloud.
-      // - If privacy is OFF, we upload nothing to cloud (Local Only).
-      
-      const shouldSyncPhysique = profile.privacySettings?.syncPhysiqueImages ?? true;
-      
-      if (shouldSyncPhysique) {
-        // Create Cloud-Safe Version (Remove Images)
-        const cloudSafePhysique = physiqueRecords.map(r => ({
-           ...r,
-           image: "" // Strip image data to save bandwidth and privacy
-        }));
-        
-        // syncToCloud(collection, localFullData, id, enableCloud, cloudOverrideData)
-        syncToCloud('physique', physiqueRecords, currentMemberId, true, cloudSafePhysique);
-      } else {
-        // Local Only Mode (Don't upload anything)
-        syncToCloud('physique', physiqueRecords, currentMemberId, false);
+      // 如果隱私設定關閉同步，直接回傳不執行雲端寫入
+      if (!canSync) {
+        console.log("隱私模式：暫停雲端同步。");
+        return;
       }
 
-    }, 2000);
+      setIsSyncing(true);
+      setSyncError(false);
+      try {
+        // 同步所有模塊
+        await Promise.all([
+          syncToCloud('profiles', profile, currentMemberId),
+          syncToCloud('metrics', metrics, currentMemberId, true),
+          syncToCloud('logs', logs, currentMemberId, true),
+          syncToCloud('diet', dietLogs, currentMemberId, true),
+          syncToCloud('reports', reports, currentMemberId, true),
+          // 體態紀錄：雲端僅存文字，照片留存本地
+          syncToCloud('physique', physiqueRecords, currentMemberId, true, physiqueRecords.map(r => ({ ...r, image: "" })))
+        ]);
+      } catch (err) {
+        setSyncError(true);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
 
+    const timer = setTimeout(performSync, 2000);
     return () => clearTimeout(timer);
-  }, [profile, metrics, logs, physiqueRecords, dietLogs, reports, isAuthenticated, currentMemberId, isAdmin, isDataLoaded]);
+  }, [profile, metrics, logs, physiqueRecords, dietLogs, reports, isAuthenticated, currentMemberId, isDataLoaded]);
 
-  const handleClaimReward = () => {
-    if (!pendingReward) return;
-    const today = new Date().toLocaleDateString('en-CA');
-    const newCollected = [...(profile.collectedRewardIds || []), pendingReward.id];
-    setProfile(prev => ({
-      ...prev,
-      collectedRewardIds: Array.from(new Set(newCollected)),
-      lastRewardClaimDate: today
-    }));
-    setShowRewardModal(false);
-    setPendingReward(null);
-  };
-
-  const handleOnboardingComplete = () => {
-    setProfile(prev => ({ ...prev, hasCompletedOnboarding: true }));
-    setShowOnboarding(false);
-    setActiveTab('dashboard');
-  };
+  // 教練問候與 AI 初始化 - 改用本地邏輯減少 AI 呼叫
+  useEffect(() => {
+    if (isAuthenticated) {
+      const greeting = getLocalDavidGreeting(profile);
+      setDavidGreeting(greeting);
+    }
+  }, [isAuthenticated, profile.name]);
 
   const handleLogin = async (id: string, pass: string) => {
     const mid = id.trim().toLowerCase();
     const remoteProfile = await fetchFromCloud('profiles', mid);
-    if (remoteProfile && remoteProfile.password === pass) {
-      executeAuth(mid);
-      return;
+    if ((remoteProfile && remoteProfile.password === pass) || (mid === 'admin_roots' && pass === '8888')) {
+      setCurrentMemberId(mid);
+      setIsAuthenticated(true);
+      sessionStorage.setItem('matrix_session', 'active');
+      localStorage.setItem('matrix_active_user', mid);
+      recordLoginEvent(mid);
+      setLoginError(false);
+    } else {
+      setLoginError(true);
     }
-    if (mid === 'admin_roots' && pass === '8888') {
-      executeAuth('admin_roots');
-      return;
-    }
-    setLoginError(true);
   };
 
-  const handleRegister = async (newProfile: UserProfile, initialWeight: number) => {
-    setIsSyncing(true);
-    try {
-      const profileToSave: UserProfile = { 
-        ...newProfile, 
-        hasCompletedOnboarding: false,
-        role: (newProfile.memberId === 'admin_roots' ? 'admin' : 'user') as 'admin' | 'user'
-      };
-      const initialMetric: UserMetrics = {
-        id: Date.now().toString(),
-        date: getLocalTimestamp(),
-        weight: initialWeight,
-        bodyFat: 18, 
-        muscleMass: 0 
-      };
-      await Promise.all([
-        syncToCloud('profiles', profileToSave, newProfile.memberId),
-        syncToCloud('metrics', [initialMetric], newProfile.memberId)
-      ]);
-      setProfile(profileToSave);
-      setMetrics([initialMetric]);
-      executeAuth(newProfile.memberId);
-    } catch (e) { alert("註冊失敗"); } finally { setIsSyncing(false); }
-  };
-
-  const executeAuth = (uid: string) => {
-    setCurrentMemberId(uid);
-    setIsAuthenticated(true);
-    setIsDataLoaded(false); 
-    sessionStorage.setItem('matrix_session', 'active');
-    localStorage.setItem('matrix_active_user', uid);
-    recordLoginEvent(uid);
-    setLoginError(false);
-  };
-
-  const handleLogout = (isAuto = false) => {
+  const handleLogout = () => {
     sessionStorage.removeItem('matrix_session');
     localStorage.removeItem('matrix_active_user');
-    setCurrentMemberId(null);
     setIsAuthenticated(false);
-    setIsDataLoaded(false);
-    setMetrics([]);
-    setLogs([]);
-    setDietLogs([]);
-    setPhysiqueRecords([]);
-    setReports([]);
-    setActiveTab('dashboard');
-    setDavidGreeting("");
-    if (isAuto) alert("系統偵測到您已閒置超過3小時，已自動登出。");
+    window.location.reload();
   };
 
-  const handleUpdateWorkoutLog = (updatedLog: WorkoutLog) => {
-    setLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
-  };
+  if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={() => {}} loginError={loginError} />;
 
-  const handleUpdateDietLog = (updatedLog: DietLog) => {
-     setDietLogs(prev => {
-        const exists = prev.find(l => l.date === updatedLog.date);
-        if (exists) {
-           return prev.map(l => l.date === updatedLog.date ? updatedLog : l);
-        } else {
-           return [...prev, updatedLog];
-        }
-     });
-  };
-
-  const handleAddReport = (report: WeeklyReportData) => {
-     setReports(prev => [report, ...prev]);
-  };
-
-  if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} loginError={loginError} />;
-
-  const todayDate = new Date().toLocaleDateString('en-CA');
-  const rewardPending = profile.lastRewardClaimDate !== todayDate;
+  // 決定狀態列顯示標籤
+  const syncEnabled = profile.privacySettings?.syncMetrics ?? true;
 
   return (
     <div className="flex min-h-screen bg-white">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={() => handleLogout()} hasPendingReward={rewardPending} profile={profile} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} profile={profile} />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
-        <div className="bg-black text-[#bef264] px-4 md:px-8 py-3 flex items-start gap-4 shadow-md z-20 sticky top-0 shrink-0">
-           <div className="mt-0.5 animate-pulse"><Terminal size={16} className="fill-current" /></div>
-           <div className="flex-1">
-             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-0.5">David Coach Uplink</p>
-             <p className="text-sm font-bold font-mono leading-tight">{isGreetingLoading && !davidGreeting ? <span className="animate-pulse">Analyzing Biometrics...</span> : <span className="animate-in fade-in duration-700">{davidGreeting}</span>}</p>
+        {/* 頂部導航欄 - 強化同步狀態顯示 */}
+        <div className="bg-black text-[#bef264] px-4 md:px-8 py-3 flex items-start gap-4 shadow-md z-20 sticky top-0 shrink-0 border-b border-white/5">
+           <div className="mt-0.5 animate-pulse"><Terminal size={16} /></div>
+           <div className="flex-1 overflow-hidden">
+             <p className="text-[10px] font-black uppercase text-gray-500 mb-0.5">David 教練：系統連線中</p>
+             <p className="text-sm font-bold font-mono truncate">{davidGreeting || '正在讀取戰術指令...'}</p>
            </div>
-           {/* Cloud Status Indicator */}
-           <div className="flex items-center gap-2">
-             {isSyncing ? (
-               <div className="flex items-center gap-1 text-[9px] font-black uppercase text-[#bef264] animate-pulse">
-                 <Loader2 size={10} className="animate-spin" /> Fetching
+           
+           {/* 同步連線狀態標籤 (顯眼反饋) */}
+           <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-sm border border-white/10">
+             {!syncEnabled ? (
+               <div className="flex items-center gap-2 text-gray-400">
+                 <ShieldOff size={14} />
+                 <span className="text-[10px] font-black uppercase tracking-widest">隱私模式 PRIVATE</span>
                </div>
-             ) : isDataLoaded ? (
-               <Cloud size={14} className="text-[#bef264]" />
+             ) : syncError ? (
+               <div className="flex items-center gap-2 text-red-500">
+                 <AlertTriangle size={14} className="animate-pulse" />
+                 <span className="text-[10px] font-black uppercase tracking-widest">同步失敗 SYNC_ERR</span>
+               </div>
+             ) : isSyncing ? (
+               <div className="flex items-center gap-2 text-[#bef264]">
+                 <Loader2 size={14} className="animate-spin" />
+                 <span className="text-[10px] font-black uppercase tracking-widest">同步中 UPLOADING...</span>
+               </div>
+             ) : dbConnected ? (
+               <div className="flex items-center gap-2 text-[#bef264]">
+                 <Cloud size={14} />
+                 <span className="text-[10px] font-black uppercase tracking-widest">雲端連線 ONLINE</span>
+               </div>
              ) : (
-               <CloudOff size={14} className="text-red-500" />
+               <div className="flex items-center gap-2 text-gray-500">
+                 <CloudOff size={14} />
+                 <span className="text-[10px] font-black uppercase tracking-widest">離線模式 OFFLINE</span>
+               </div>
              )}
            </div>
         </div>
 
-        <div className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32 animate-in fade-in duration-500">
+        <div className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32">
           {!isDataLoaded && (
-            <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
+            <div className="fixed inset-0 z-50 bg-white/80 flex flex-col items-center justify-center">
               <Loader2 className="w-10 h-10 animate-spin text-black mb-4" />
-              <p className="text-xs font-black uppercase tracking-widest text-gray-500">Retrieving Cloud Data...</p>
+              <p className="text-xs font-black uppercase tracking-widest text-gray-500">雲端數據初始化中...</p>
             </div>
           )}
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
-          {activeTab === 'diet' && <NutritionDeck dietLogs={dietLogs} onUpdateDietLog={handleUpdateDietLog} profile={profile} workoutLogs={logs} />}
-          {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onUpdateLog={handleUpdateWorkoutLog} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} profile={profile} onProfileUpdate={setProfile} />}
+          {activeTab === 'diet' && <NutritionDeck dietLogs={dietLogs} onUpdateDietLog={(log) => setDietLogs(prev => prev.some(l => l.date === log.date) ? prev.map(l => l.date === log.date ? log : l) : [...prev, log])} profile={profile} workoutLogs={logs} />}
+          {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} profile={profile} onProfileUpdate={setProfile} />}
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} onDeleteRecord={(id) => setPhysiqueRecords(prev => prev.filter(r => r.id !== id))} onProfileUpdate={setProfile} />}
-          {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} weeklyReports={reports} onAddReport={handleAddReport} />}
+          {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} weeklyReports={reports} onAddReport={(r) => setReports(prev => [r, ...prev])} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => setShowOnboarding(true)} />}
         </div>
-        
-        {isSyncing && isDataLoaded && <div className="fixed top-20 right-8 bg-black text-[#bef264] px-4 py-2 text-[10px] font-black tracking-widest uppercase flex items-center gap-3 z-[60] shadow-2xl border border-[#bef264]/20"><Loader2 size={12} className="animate-spin" /> SYNCING</div>}
-        {showRewardModal && pendingReward && !showOnboarding && <DailyRewardModal reward={pendingReward} streak={profile.loginStreak || 1} onClaim={handleClaimReward} briefing={dailyBriefing} isLoadingBriefing={isBriefingLoading} />}
-        {showOnboarding && <Onboarding userName={profile.name} onComplete={handleOnboardingComplete} onStepChange={setActiveTab} />}
-        
-        {/* Timeout Warning Modal */}
-        {showTimeoutWarning && (
-          <div className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
-            <div className="bg-white p-10 max-w-md w-full border-4 border-yellow-400 shadow-2xl text-center space-y-8 animate-in zoom-in duration-300">
-              <AlertTriangle size={48} className="mx-auto text-yellow-500" />
-              <div className="space-y-2"><h3 className="text-2xl font-black uppercase tracking-tighter">閒置提醒</h3><p className="text-gray-600 font-bold">David 教練：偵測到您已閒置超過 {showTimeoutWarning}，請問還在訓練嗎？</p></div>
-              <div className="flex gap-4">
-                <button onClick={() => handleLogout()} className="flex-1 py-4 bg-gray-100 text-gray-500 font-black uppercase text-xs tracking-widest hover:bg-red-500 hover:text-white transition-all">登出</button>
-                <button onClick={() => setShowTimeoutWarning(null)} className="flex-1 py-4 bg-black text-white font-black uppercase text-xs tracking-widest hover:bg-[#bef264] hover:text-black transition-all">繼續訓練</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Install Prompt Overlay (Mobile) */}
-        {showInstallPrompt && (
-           <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-md flex flex-col justify-end pb-12 animate-in fade-in duration-500">
-              <div className="bg-white p-8 rounded-t-3xl border-t-8 border-[#bef264] relative space-y-6">
-                 <button onClick={() => setShowInstallPrompt(false)} className="absolute top-4 right-4 text-gray-300 hover:text-black"><div className="p-2"><CloudOff size={20}/></div></button>
-                 <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-black flex items-center justify-center shadow-xl">
-                       <span className="text-[#bef264] font-black italic text-4xl pr-1">M</span>
-                    </div>
-                    <div>
-                       <h3 className="text-xl font-black uppercase tracking-tighter">THE MATRIX SYSTEM</h3>
-                       <p className="text-[10px] font-mono text-gray-400 font-bold tracking-widest">PWA INSTALLATION REQUIRED</p>
-                    </div>
-                 </div>
-                 <p className="text-sm font-bold text-gray-700 leading-relaxed">
-                    執行者，為了確保系統通訊穩定與全螢幕戰術視野，請將 The Matrix 加入主畫面。
-                 </p>
-                 <div className="flex items-center gap-4 text-xs font-bold text-gray-500 bg-gray-50 p-4 rounded-lg">
-                    <span>1. 點擊瀏覽器下方的</span>
-                    <Share size={16} className="text-blue-500" />
-                    <span>分享按鈕</span>
-                 </div>
-                 <div className="flex items-center gap-4 text-xs font-bold text-gray-500 bg-gray-50 p-4 rounded-lg">
-                    <span>2. 選擇</span>
-                    <ArrowUpSquare size={16} className="text-black" />
-                    <span>加入主畫面</span>
-                 </div>
-                 <button onClick={() => setShowInstallPrompt(false)} className="w-full bg-black text-[#bef264] py-4 font-black uppercase tracking-widest text-xs hover:bg-[#bef264] hover:text-black transition-all">
-                    收到，暫時忽略
-                 </button>
-              </div>
-           </div>
-        )}
-
       </main>
-      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => handleLogout()} isAdmin={isAdmin} />
+      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} isAdmin={isAdmin} />
     </div>
   );
 };

@@ -65,8 +65,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, is
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="w-8 h-8 bg-white border border-gray-200 flex items-center justify-center text-[8px] font-black text-gray-400 shrink-0">USR</div>
             <div className="overflow-hidden">
-              <p className="text-[11px] font-black uppercase truncate text-black">{memberId}</p>
-              <p className="text-[8px] text-lime-600 font-mono font-bold tracking-widest">CONNECTION: SECURE</p>
+              <p className="text-[10px] font-black uppercase truncate text-black">{memberId}</p>
+              <p className="text-[8px] text-lime-600 font-mono font-bold tracking-widest uppercase">使用者 ID: SECURE</p>
             </div>
           </div>
           <button 

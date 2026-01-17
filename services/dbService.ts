@@ -6,107 +6,87 @@ import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } fro
 // Destructure from the namespace to bypass potential missing type exports in certain environments
 const { initializeApp, getApps, getApp } = firebaseApp as any;
 
-// 1. 修正環境變數讀取方式：使用 import.meta.env 並移除預設字串，確保讀取 Vercel/本地 環境變數
+// 依照指示修正環境變數讀取與預設值
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: process.env.VITE_FIREBASE_API || "AIzaSyAdr5J_-sf3Q486Wzmri3gYdOJLC-pMZEE",
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "workout-app-20752.firebaseapp.com",
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || "workout-app-20752",
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "workout-app-20752.firebasestorage.app",
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "649579159803",
+  appId: process.env.VITE_FIREBASE_APP_ID || "1:649579159803:web:886b8bb1e56a0c2dda505e",
+  measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || "G-GXX10CEYPK"
 };
 
-// Use any for types to resolve environment-specific module resolution issues with Firebase exports
 let app: any;
 let db: any;
 
-// Initialize Firebase modularly
 try {
   const apps = getApps();
-  // 檢查 apiKey 是否存在，避免空值導致初始化錯誤
   if (firebaseConfig.apiKey) {
     app = apps.length === 0 ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
-    console.log("Firebase initialized successfully");
+    console.log("Matrix 資料庫引擎：已連結至雲端節點。");
   } else {
-    console.warn("Firebase config missing (apiKey). Data will be stored locally.");
+    console.warn("未偵測到資料庫金鑰，系統切換至純本地離線模式。");
   }
 } catch (e) {
-  console.error("Firebase Initialization Failed", e);
+  console.error("Firebase 初始化失敗:", e);
 }
 
 export { db };
 
 /**
- * 混合存儲同步函數 (Local-First + Cloud Sync)
- * @param collectionName 集合名稱
- * @param data 要存儲的數據 (完整版，存入本地)
- * @param userId 用戶 ID
- * @param enableCloud 是否允許上傳至雲端
- * @param cloudDataOverride (可選) 若提供，雲端將儲存此數據而非 data (用於移除敏感照片)
+ * 強化混合存儲函數 (Local-First + Forced Cloud Sync)
+ * 確保數據絕對會存於本地，並在有連線時即時推送至雲端。
  */
 export const syncToCloud = async (collectionName: string, data: any, userId: string, enableCloud: boolean = true, cloudDataOverride?: any) => {
   if (!userId) return;
 
-  // --- 1. 本地優先策略 (Local Backup) ---
-  // 無論雲端開關為何，先強制寫入本地 LocalStorage 作為絕對備份 (含圖片)
   const localBackupKey = `matrix_backup_${userId}_${collectionName}`;
   const timestamp = new Date().toISOString();
 
+  // 1. 強制保存至本地 (絕對存儲，包含圖片等所有細節)
   try {
     localStorage.setItem(localBackupKey, JSON.stringify({
-      data, // 這裡永遠存完整版 (含圖片)
-      updatedAt: timestamp,
-      syncStatus: enableCloud ? 'PENDING' : 'LOCAL_ONLY'
+      data,
+      updatedAt: timestamp
     }));
   } catch (e) {
-    console.warn(`[Local Storage] 寫入失敗 (可能空間不足): ${collectionName}`, e);
+    console.warn(`[本地寫入警告] ${collectionName} 空間受限。`, e);
   }
 
-  // 若用戶關閉雲端同步，則到此為止
-  if (!enableCloud) return;
-
-  // --- 2. 雲端同步 (Cloud Sync) ---
-  if (!db) {
-    // 雖然沒連線，但我們已經存了本地，所以不報錯，僅警告
-    // console.warn("Firestore 未連線，數據已安全保存在本地。");
-    return;
-  }
+  // 2. 雲端推送 (若連線正常且允許同步)
+  if (!enableCloud || !db) return;
 
   try {
     const docRef = doc(db, collectionName, userId);
-    
-    // 決定上傳的 payload：如果有 override (例如去除了圖片的版本)，則用 override
-    const payload = cloudDataOverride || data;
+    // 使用過濾後的數據上傳 (例如體態紀錄中不含 Base64 照片，僅存分析文字)
+    const payload = cloudDataOverride !== undefined ? cloudDataOverride : data;
 
     await setDoc(docRef, { 
       data: payload, 
       updatedAt: timestamp, 
-      authorizedBy: userId,
-      userAgent: navigator.userAgent
+      ownerId: userId 
     });
     
-    // 註冊表邏輯 (僅針對 Profiles)
+    // 註冊表特殊邏輯
     if (collectionName === 'profiles') {
       const registryRef = doc(db, 'system_metadata', 'user_registry');
       await setDoc(registryRef, { [userId]: { 
         memberId: userId, 
         name: data.name, 
-        role: data.role, 
-        lastActive: timestamp, 
-        status: 'ACTIVE' 
+        lastActive: timestamp 
       } }, { merge: true });
     }
   } catch (error) {
-    console.error(`[Cloud Error] ${collectionName} 同步失敗，已保留本地備份:`, error);
+    console.error(`[雲端同步失敗] ${collectionName}:`, error);
+    throw error; // 拋出錯誤供 UI 顯示警告
   }
 };
 
 /**
- * 智能混合讀取函數 (Smart Merge: Local + Cloud)
- * 1. 比較時間戳記，取較新者。
- * 2. 針對 Physique，執行「圖片回補」邏輯。
+ * 智能獲取函數
+ * 同步比對本地與雲端版本，確保數據最新且完整。
  */
 export const fetchFromCloud = async (collectionName: string, userId: string) => {
   if (!userId) return null;
@@ -114,73 +94,49 @@ export const fetchFromCloud = async (collectionName: string, userId: string) => 
   let cloudDataObj: any = null;
   let localDataObj: any = null;
 
-  // 1. 讀取本地
-  const localBackupKey = `matrix_backup_${userId}_${collectionName}`;
-  const localRaw = localStorage.getItem(localBackupKey);
+  // 讀取本地
+  const localRaw = localStorage.getItem(`matrix_backup_${userId}_${collectionName}`);
   if (localRaw) {
-    try {
-      localDataObj = JSON.parse(localRaw);
-    } catch(e) {}
+    try { localDataObj = JSON.parse(localRaw); } catch(e) {}
   }
 
-  // 2. 讀取雲端
+  // 讀取雲端
   if (db) {
     try {
-      const docRef = doc(db, collectionName, userId);
-      const snap = await getDoc(docRef);
+      const snap = await getDoc(doc(db, collectionName, userId));
       if (snap.exists()) {
         cloudDataObj = snap.data();
       }
-    } catch (error) {
-      console.warn(`[Cloud Fetch] ${collectionName} 讀取失敗`, error);
+    } catch (e) {
+      console.warn(`[雲端讀取異常] ${collectionName}。`);
     }
   }
 
-  // 3. 決策邏輯 (Smart Decision)
-  
-  // A. 只有本地數據
-  if (localDataObj && !cloudDataObj) return localDataObj.data;
-  
-  // B. 只有雲端數據
-  if (!localDataObj && cloudDataObj) return cloudDataObj.data;
-  
-  // C. 兩者皆無
-  if (!localDataObj && !cloudDataObj) return null;
+  // 合併與決策
+  if (!cloudDataObj) return localDataObj?.data || null;
+  if (!localDataObj) return cloudDataObj.data;
 
-  // D. 兩者皆有 -> 比較時間
   const localTime = new Date(localDataObj.updatedAt).getTime();
   const cloudTime = new Date(cloudDataObj.updatedAt).getTime();
-  
-  // 判斷贏家
-  let winnerData = (localTime >= cloudTime) ? localDataObj.data : cloudDataObj.data;
 
-  // --- 特殊邏輯：Physique 圖片回補 ---
-  // 如果雲端數據是贏家 (較新)，但它沒有圖片 (因為我們上傳時剝離了)，
-  // 而本地舊數據有圖片，我們應該把圖片補回來，而不是讓它變成空白。
-  if (collectionName === 'physique' && localTime < cloudTime) {
-     // Cloud win, but might lack images.
-     const mergedData = winnerData.map((cloudItem: any) => {
-        if (!cloudItem.image) {
-           // 嘗試從本地找對應 ID 的圖片
-           const localMatch = localDataObj.data.find((l: any) => l.id === cloudItem.id);
-           if (localMatch && localMatch.image) {
-              return { ...cloudItem, image: localMatch.image };
-           }
-        }
-        return cloudItem;
-     });
-     return mergedData;
+  // 體態紀錄特殊處理：補回本地照片
+  if (collectionName === 'physique' && cloudTime >= localTime) {
+    let result = cloudDataObj.data;
+    result = result.map((cloudItem: any) => {
+      const localMatch = localDataObj.data.find((l: any) => l.id === cloudItem.id);
+      return (localMatch && localMatch.image) ? { ...cloudItem, image: localMatch.image } : cloudItem;
+    });
+    return result;
   }
 
-  return winnerData;
+  return (cloudTime >= localTime) ? cloudDataObj.data : localDataObj.data;
 };
 
 export const recordLoginEvent = async (userId: string) => {
   if (!db) return;
   try {
     const logId = `log_${Date.now()}`;
-    await setDoc(doc(db, 'auth_logs', logId), { memberId: userId, timestamp: new Date().toISOString(), userAgent: navigator.userAgent });
-    await setDoc(doc(db, 'system_metadata', 'user_registry'), { [userId]: { lastActive: new Date().toISOString() } }, { merge: true });
+    await setDoc(doc(db, 'auth_logs', logId), { memberId: userId, timestamp: new Date().toISOString() });
   } catch (e) {}
 };
 
@@ -196,17 +152,16 @@ export const getAllAuthLogs = async () => {
   if (!db) return [];
   try {
     const querySnapshot = await getDocs(collection(db, "auth_logs"));
-    return querySnapshot.docs.map(doc => doc.data()).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return querySnapshot.docs.map(doc => doc.data());
   } catch (e) { return []; }
 };
 
 export const purgeUser = async (userId: string) => {
   if (!db) return;
-  const collections = ['profiles', 'metrics', 'logs', 'physique', 'diet'];
+  const collections = ['profiles', 'metrics', 'logs', 'physique', 'diet', 'reports'];
   for (const col of collections) {
     try { 
       await deleteDoc(doc(db, col, userId)); 
-      // 也清除本地備份
       localStorage.removeItem(`matrix_backup_${userId}_${col}`);
     } catch(e) {}
   }
