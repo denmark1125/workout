@@ -10,7 +10,7 @@ const env = (import.meta as any).env || {};
 
 // 1. 修正環境變數讀取方式 (符合 Vite 規範)
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyAdr5J_-sf3Q486Wzmri3gYdOJLC-pMZEE",
+  apiKey: env.VITE_FIREBASE_API || "AIzaSyAdr5J_-sf3Q486Wzmri3gYdOJLC-pMZEE",
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "workout-app-20752.firebaseapp.com",
   projectId: env.VITE_FIREBASE_PROJECT_ID || "workout-app-20752",
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "workout-app-20752.firebasestorage.app",

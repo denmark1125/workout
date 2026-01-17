@@ -35,10 +35,10 @@ const DAVID_QUOTES = [
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
   // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;
   
   if (!apiKey) {
-    console.error("Critical Error: VITE_GEMINI_API_KEY not found in environment variables.");
+    console.error("Critical Error: VITE_WORKOUT_GEMINI_API not found.");
     throw new Error("系統配置錯誤：缺少 AI API 金鑰");
   }
   return new GoogleGenAI({ apiKey });
