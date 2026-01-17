@@ -2,8 +2,8 @@
 import React, { useState, useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { UserMetrics, UserProfile, GoalMetadata } from '../types';
-import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus, getLocalTimestamp } from '../utils/calculations';
-import { TrendingUp, History, Trash2, ChevronDown, Info, AlertCircle } from 'lucide-react';
+import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus, getLocalTimestamp, getTaiwanDate } from '../utils/calculations';
+import { TrendingUp, History, Trash2, ChevronDown, Info, AlertCircle, Calendar } from 'lucide-react';
 
 interface DataEngineProps {
   profile: UserProfile;
@@ -26,6 +26,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
   const radarData = getRadarData(profile, latest as UserMetrics, calculated);
 
   const [input, setInput] = useState({ 
+    date: getTaiwanDate(),
     weight: latest.weight, 
     bodyFat: latest.bodyFat, 
     muscleMass: ''
@@ -46,14 +47,19 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
     const weightVal = Number(input.weight) || 0;
     const bodyFatVal = Number(input.bodyFat) || 0;
     
+    // 修正：不再打八折，直接計算除脂體重 (Total Lean Mass)
     const mMass = input.muscleMass === '' 
-      ? Number((weightVal * (1 - bodyFatVal / 100) * 0.8).toFixed(1))
+      ? Number((weightVal * (1 - bodyFatVal / 100)).toFixed(1))
       : Number(input.muscleMass);
+
+    const fullTimestamp = input.date === getTaiwanDate() 
+      ? getLocalTimestamp() 
+      : `${input.date} 12:00`;
 
     setTimeout(() => {
       onAddMetric({
         id: Date.now().toString(),
-        date: getLocalTimestamp(),
+        date: fullTimestamp,
         weight: weightVal,
         bodyFat: bodyFatVal,
         muscleMass: mMass
@@ -69,10 +75,15 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
     }
   };
 
-  const trendData = metrics.slice(-7).map(m => ({
-    ...m,
-    shortDate: m.date.split(' ')[0].substring(5),
-  }));
+  const trendData = useMemo(() => {
+    return [...metrics]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-7)
+      .map(m => ({
+        ...m,
+        shortDate: m.date.split(' ')[0].substring(5),
+      }));
+  }, [metrics]);
 
   const statsCards = [
     { 
@@ -198,7 +209,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
              </button>
              {showHistory && (
                <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto custom-scrollbar">
-                  {[...metrics].reverse().map(m => (
+                  {[...metrics].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(m => (
                     <div key={m.id} className="flex items-center justify-between px-8 py-5 text-[12px] hover:bg-gray-50 group">
                       <div className="flex items-center gap-6">
                         <span className="font-mono text-gray-400 w-24">{m.date.split(' ')[0]}</span>
@@ -221,6 +232,17 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
             <div className="absolute top-0 right-0 w-0 h-0 border-t-[40px] border-r-[40px] border-t-transparent border-r-[#bef264]"></div>
             <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-4">生理數據輸入 INPUT_NODE</p>
             <div className="space-y-6">
+              <div>
+                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 block flex items-center gap-2">
+                  <Calendar size={12} /> 紀錄日期 DATE
+                </label>
+                <input 
+                  type="date" 
+                  value={input.date} 
+                  onChange={e => setInput({...input, date: e.target.value})}
+                  className="w-full bg-gray-50 border-b-2 border-transparent focus:border-black px-0 py-2 text-lg font-black outline-none transition-all cursor-pointer" 
+                />
+              </div>
               <div>
                 <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 block">體重 Weight (kg)</label>
                 <input 
@@ -254,7 +276,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics, onAddMetric, 
                 <div className="flex gap-2 p-3 bg-gray-50/50 border border-gray-100">
                    <AlertCircle size={12} className="text-gray-300 shrink-0 mt-0.5" />
                    <p className="text-[9px] text-gray-400 leading-tight font-bold italic">
-                     David教練：若留白，系統會推算「骨骼肌重」(SMM，約除脂體重 80%)；若輸入體重計數值，系統會直接採用該總肌肉量。
+                     David教練：若留白，系統將根據體重與體脂推算出「總肌肉量/除脂體重」。建議依照體重計數值輸入，以獲得最精準的反饋。
                    </p>
                 </div>
               </div>
