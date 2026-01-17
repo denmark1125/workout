@@ -13,7 +13,7 @@ import RewardVault from './components/RewardVault';
 import DailyRewardModal from './components/DailyRewardModal';
 import Onboarding from './components/Onboarding'; 
 import NutritionDeck from './components/NutritionDeck'; 
-import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog } from './types';
+import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog, WeeklyReportData } from './types';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService';
 import { getDailyBriefing, getDavidGreeting } from './services/geminiService'; 
 import { getLocalTimestamp, calculateMatrix } from './utils/calculations';
@@ -74,6 +74,7 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [physiqueRecords, setPhysiqueRecords] = useState<PhysiqueRecord[]>([]);
   const [dietLogs, setDietLogs] = useState<DietLog[]>([]);
+  const [reports, setReports] = useState<WeeklyReportData[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -149,12 +150,13 @@ const App: React.FC = () => {
       if (!isAuthenticated || !currentMemberId) return;
       setIsSyncing(true);
       try {
-        const [p, m, l, ph, dlogs] = await Promise.all([
+        const [p, m, l, ph, dlogs, rpts] = await Promise.all([
           fetchFromCloud('profiles', currentMemberId),
           fetchFromCloud('metrics', currentMemberId),
           fetchFromCloud('logs', currentMemberId),
           fetchFromCloud('physique', currentMemberId),
-          fetchFromCloud('diet', currentMemberId)
+          fetchFromCloud('diet', currentMemberId),
+          fetchFromCloud('reports', currentMemberId)
         ]);
         
         if (p) {
@@ -206,6 +208,7 @@ const App: React.FC = () => {
         if (l) setLogs(l);
         if (ph) setPhysiqueRecords(ph);
         if (dlogs) setDietLogs(dlogs);
+        if (rpts) setReports(rpts);
         
       } catch (e) { 
         console.warn("同步失敗 (可能為離線狀態，已使用本地緩存)", e); 
@@ -232,6 +235,7 @@ const App: React.FC = () => {
       syncToCloud('metrics', metrics, currentMemberId, shouldSyncData);
       syncToCloud('logs', logs, currentMemberId, shouldSyncData);
       syncToCloud('diet', dietLogs, currentMemberId, shouldSyncData);
+      syncToCloud('reports', reports, currentMemberId, shouldSyncData);
       
       // 3. Physique: Special Hybrid Handling
       // User request: "Store locally only, do not force upload (unless privacy closed)"
@@ -260,7 +264,7 @@ const App: React.FC = () => {
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [profile, metrics, logs, physiqueRecords, dietLogs, isAuthenticated, currentMemberId, isAdmin, isDataLoaded]);
+  }, [profile, metrics, logs, physiqueRecords, dietLogs, reports, isAuthenticated, currentMemberId, isAdmin, isDataLoaded]);
 
   const handleClaimReward = () => {
     if (!pendingReward) return;
@@ -340,6 +344,7 @@ const App: React.FC = () => {
     setLogs([]);
     setDietLogs([]);
     setPhysiqueRecords([]);
+    setReports([]);
     setActiveTab('dashboard');
     setDavidGreeting("");
     if (isAuto) alert("系統偵測到您已閒置超過3小時，已自動登出。");
@@ -358,6 +363,10 @@ const App: React.FC = () => {
            return [...prev, updatedLog];
         }
      });
+  };
+
+  const handleAddReport = (report: WeeklyReportData) => {
+     setReports(prev => [report, ...prev]);
   };
 
   if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} loginError={loginError} />;
@@ -400,7 +409,7 @@ const App: React.FC = () => {
           {activeTab === 'diet' && <NutritionDeck dietLogs={dietLogs} onUpdateDietLog={handleUpdateDietLog} profile={profile} workoutLogs={logs} />}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={(l) => setLogs([...logs, l])} onUpdateLog={handleUpdateWorkoutLog} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} profile={profile} onProfileUpdate={setProfile} />}
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} onDeleteRecord={(id) => setPhysiqueRecords(prev => prev.filter(r => r.id !== id))} onProfileUpdate={setProfile} />}
-          {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} />}
+          {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} weeklyReports={reports} onAddReport={handleAddReport} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => setShowOnboarding(true)} />}

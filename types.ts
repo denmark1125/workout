@@ -80,6 +80,14 @@ export interface PhysiqueRecord {
   isLocalOnly?: boolean; 
 }
 
+// --- Report Types ---
+export interface WeeklyReportData {
+  id: string;
+  weekId: string;
+  date: string; // generated date
+  content: string; // The markdown text
+}
+
 // --- Diet Types ---
 
 export interface MacroNutrients {

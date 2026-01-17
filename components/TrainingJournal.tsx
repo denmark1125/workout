@@ -1,7 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkoutLog, WorkoutExercise, UserProfile, ExerciseType } from '../types';
-import { getDailyFeedback } from '../services/geminiService';
 import { getTaiwanDate } from '../utils/calculations';
 import { ChevronLeft, ChevronRight, Plus, X, Trash2, Clock, MessageSquare, Zap, Loader2, RotateCcw, History, Save, Edit2, Check, Tag, ChevronUp, ChevronDown, Activity, Dumbbell, Flame } from 'lucide-react';
 
@@ -20,7 +19,6 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
   
   const [showCoachFeedback, setShowCoachFeedback] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
-  const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   // 登錄模組狀態
   const [startTime, setStartTime] = useState("18:00");
@@ -216,7 +214,6 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
       return;
     }
     
-    setIsAiProcessing(true);
     const logFocus = selectedFocus.filter(f => f.trim() !== '').join(', ');
     const totalBurn = pendingExercises.reduce((sum, ex) => sum + (ex.caloriesBurned || 0), 0);
     
@@ -225,7 +222,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
       date: selectedDate,
       startTime, endTime,
       focus: logFocus,
-      feedback: feedback,
+      feedback: feedback, // 手動反饋保留
       durationMinutes: duration,
       exercises: pendingExercises,
       totalCaloriesBurned: totalBurn
@@ -238,28 +235,12 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
       onAddLog(newLog);
     }
 
-    const today = getTaiwanDate();
-    let aiResponse = "";
-    
-    if (selectedDate === today) {
-       try {
-         aiResponse = await getDailyFeedback(profile, newLog);
-         if (profile.lastDailyFeedbackDate !== today) {
-           onProfileUpdate({ ...profile, lastDailyFeedbackDate: today });
-         }
-       } catch (error: any) {
-         aiResponse = `David 教練：紀錄已保存，但 AI 連線異常 (${error.message})。`;
-       }
-    } else {
-       aiResponse = isEditingHistory ? "David教練: 歷史軌跡已修正。" : "David教練: 紀錄已封存。";
-    }
-
-    setFeedbackMsg(aiResponse);
+    // 移除 AI 反饋，改為即時確認
+    setFeedbackMsg("戰術日誌已封存。數據已整合至系統矩陣。");
     setShowCoachFeedback(true);
-    setIsAiProcessing(false);
     
     localStorage.removeItem(`matrix_draft_${profile.memberId}`);
-    setTimeout(() => setShowCoachFeedback(false), 6000);
+    setTimeout(() => setShowCoachFeedback(false), 3000);
 
     setPendingExercises([]);
     setFeedback('');
@@ -581,21 +562,16 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
               <div className="space-y-4">
                 <textarea 
                   value={feedback} onChange={e => setFeedback(e.target.value)}
-                  placeholder="David 教練: 今天的肌肉充血感與神經疲勞程度如何？"
+                  placeholder="訓練筆記 (可選): 今天的肌肉充血感與神經疲勞程度如何？"
                   className="w-full bg-gray-50 p-5 text-sm font-bold outline-none focus:bg-white border border-transparent focus:border-black resize-none h-32 transition-all shadow-inner"
                 />
                 
                 <button 
                   onClick={handleCommit} 
-                  disabled={isAiProcessing || pendingExercises.length === 0}
+                  disabled={pendingExercises.length === 0}
                   className={`w-full py-6 font-black text-xs tracking-[0.5em] uppercase transition-all shadow-2xl active:scale-95 disabled:opacity-50 ${isEditingHistory ? 'bg-blue-600 text-white' : 'bg-black text-white hover:bg-[#bef264] hover:text-black'}`}
                 >
-                  {isAiProcessing ? (
-                    <span className="flex items-center justify-center gap-2 animate-pulse">
-                       <Loader2 size={14} className="animate-spin" />
-                       David 戰略官分析中...
-                    </span>
-                  ) : isEditingHistory ? '確認修正歷史紀錄 UPDATE' : '完成訓練數據封存 COMMIT'}
+                   {isEditingHistory ? '確認修正歷史紀錄 UPDATE' : '完成訓練數據封存 COMMIT'}
                 </button>
               </div>
             </div>
@@ -608,7 +584,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
            <div className="bg-black text-[#bef264] p-8 border-4 border-[#bef264] shadow-[0_0_100px_rgba(190,242,100,0.5)] animate-in zoom-in duration-300 max-w-lg">
               <div className="flex items-center gap-4 mb-4">
                  <Zap size={28} className="fill-current animate-pulse" />
-                 <p className="text-[12px] font-black uppercase tracking-[0.4em]">Field Analyst Update</p>
+                 <p className="text-[12px] font-black uppercase tracking-[0.4em]">System Notification</p>
               </div>
               <p className="text-xl font-bold italic tracking-tight leading-snug text-white whitespace-pre-wrap">{feedbackMsg}</p>
               <div className="mt-8 pt-4 border-t border-[#bef264]/20 text-[9px] font-mono text-[#bef264]/60 text-right uppercase">Uplink Stable - Matrix Verified</div>

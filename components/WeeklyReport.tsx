@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
-import { UserProfile, UserMetrics, WorkoutLog, PhysiqueRecord, GoalMetadata } from '../types';
+import React, { useState, useRef } from 'react';
+import { UserProfile, UserMetrics, WorkoutLog, PhysiqueRecord, GoalMetadata, WeeklyReportData } from '../types';
 import { generateWeeklyReport } from '../services/geminiService';
 import { getTaiwanWeekId } from '../utils/calculations';
-import { FileText, Zap, ArrowRight, Loader2, Target, Brain, Activity, User, Calendar } from 'lucide-react';
+import { FileText, Zap, ArrowRight, Loader2, Target, Brain, Activity, User, Calendar, Image as ImageIcon, ChevronDown, History } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 interface WeeklyReportProps {
   profile: UserProfile;
@@ -11,6 +12,8 @@ interface WeeklyReportProps {
   logs: WorkoutLog[];
   physiqueRecords: PhysiqueRecord[];
   onProfileUpdate: (p: UserProfile) => void;
+  weeklyReports: WeeklyReportData[];
+  onAddReport: (r: WeeklyReportData) => void;
 }
 
 // === Rich Text Parser for Beautiful Rendering ===
@@ -72,13 +75,22 @@ const RichTextParser: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, physiqueRecords, onProfileUpdate }) => {
+const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, physiqueRecords, onProfileUpdate, weeklyReports, onAddReport }) => {
   const [report, setReport] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const currentWeek = getTaiwanWeekId();
   const currentCount = profile.weeklyReportUsage?.weekId === currentWeek ? profile.weeklyReportUsage.count : 0;
   const isLimitReached = currentCount >= 2 && profile.role !== 'admin';
+
+  // Load latest report if exists and we haven't generated one this session
+  React.useEffect(() => {
+     if (!report && weeklyReports.length > 0) {
+        setReport(weeklyReports[0].content);
+     }
+  }, [weeklyReports]);
 
   const handleGenerate = async () => {
     if (metrics.length === 0 && logs.length === 0) {
@@ -88,9 +100,19 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
     setLoading(true);
     try {
       const result = await generateWeeklyReport(profile, metrics, logs, physiqueRecords);
-      setReport(result || "生成失敗，系統無效回饋。");
+      const textResult = result || "生成失敗，系統無效回饋。";
+      setReport(textResult);
       
-      if (profile.role !== 'admin' && !result.includes('存取限制') && !result.includes('流量管制') && !result.includes('連線逾時')) {
+      // Auto-save the report
+      if (profile.role !== 'admin' && !textResult.includes('存取限制') && !textResult.includes('流量管制')) {
+        const newReportData: WeeklyReportData = {
+           id: Date.now().toString(),
+           weekId: currentWeek,
+           date: new Date().toLocaleDateString(),
+           content: textResult
+        };
+        onAddReport(newReportData);
+
         onProfileUpdate({
           ...profile,
           weeklyReportUsage: {
@@ -106,6 +128,29 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
     }
   };
 
+  const handleExportJpg = async () => {
+    if (!reportRef.current) return;
+    try {
+      const canvas = await html2canvas(reportRef.current, {
+        backgroundColor: '#111111',
+        scale: 2, // Higher resolution
+        useCORS: true,
+        logging: false
+      });
+      const link = document.createElement('a');
+      link.download = `MATRIX_REPORT_${currentWeek}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.9);
+      link.click();
+    } catch (e) {
+      alert("輸出戰術圖卡失敗，請重試。");
+    }
+  };
+
+  const selectReport = (r: WeeklyReportData) => {
+     setReport(r.content);
+     setShowHistory(false);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-12 md:space-y-16 pb-40 px-4">
       
@@ -115,31 +160,69 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ profile, metrics, logs, phy
           <p className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-[0.4em] mb-2">Tactical Intelligence</p>
           <h2 className="text-4xl md:text-6xl font-black text-black tracking-tighter uppercase leading-none">戰略週報</h2>
         </div>
-        <div className="flex flex-col items-end gap-3">
+        <div className="flex flex-col items-end gap-3 w-full md:w-auto">
           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest bg-gray-100 px-3 py-1 rounded-sm">
             WEEKLY LIMIT: {isLimitReached ? 'MAXED' : `${currentCount}/2`}
           </p>
-          <button
-            onClick={handleGenerate}
-            disabled={loading || isLimitReached}
-            className={`px-10 py-5 font-black uppercase tracking-[0.2em] text-xs transition-all flex items-center gap-4 shadow-xl transform hover:-translate-y-1
-              ${loading || isLimitReached ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-[#bef264] hover:bg-[#bef264] hover:text-black'}`}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" /> 
-                <span className="animate-pulse">David 戰略官分析中...</span>
-              </>
-            ) : (
-              <><Zap className="w-5 h-5 fill-current" /> 生成戰略報告</>
-            )}
-          </button>
+          <div className="flex gap-2 w-full md:w-auto">
+             <button
+               onClick={handleGenerate}
+               disabled={loading || isLimitReached}
+               className={`flex-1 md:flex-none px-6 py-5 font-black uppercase tracking-[0.2em] text-xs transition-all flex items-center justify-center gap-4 shadow-xl transform hover:-translate-y-1
+                 ${loading || isLimitReached ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-[#bef264] hover:bg-[#bef264] hover:text-black'}`}
+             >
+               {loading ? (
+                 <>
+                   <Loader2 className="w-5 h-5 animate-spin" /> 
+                   <span className="animate-pulse">Analyzing...</span>
+                 </>
+               ) : (
+                 <><Zap className="w-5 h-5 fill-current" /> 生成戰略報告</>
+               )}
+             </button>
+             
+             {report && (
+                <button
+                  onClick={handleExportJpg}
+                  className="px-5 py-5 bg-white border border-gray-200 text-black hover:border-black font-black uppercase transition-all shadow-sm flex items-center justify-center"
+                  title="輸出圖卡"
+                >
+                   <ImageIcon className="w-5 h-5" />
+                </button>
+             )}
+          </div>
         </div>
       </header>
 
+      {/* History Dropdown */}
+      {weeklyReports.length > 0 && (
+         <div className="relative z-20">
+            <button onClick={() => setShowHistory(!showHistory)} className="flex items-center gap-3 px-6 py-4 bg-white border border-gray-200 shadow-sm hover:border-black transition-all w-full md:w-80 justify-between group">
+               <div className="flex items-center gap-3">
+                  <History size={16} className="text-gray-400 group-hover:text-black" />
+                  <span className="text-xs font-black uppercase tracking-widest">歷史週報 ({weeklyReports.length})</span>
+               </div>
+               <ChevronDown size={16} className={`transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+            </button>
+            {showHistory && (
+               <div className="absolute top-full left-0 w-full md:w-80 bg-white border border-black shadow-xl mt-2 max-h-60 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2">
+                  {weeklyReports.map(r => (
+                     <button key={r.id} onClick={() => selectReport(r)} className="w-full text-left px-6 py-4 hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                        <div className="flex justify-between items-center">
+                           <span className="text-xs font-bold text-gray-800">{r.date}</span>
+                           <span className="text-[9px] font-mono text-gray-400">{r.weekId}</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1 truncate">{r.content.substring(0, 30)}...</p>
+                     </button>
+                  ))}
+               </div>
+            )}
+         </div>
+      )}
+
       {report ? (
         <div className="animate-in fade-in slide-in-from-bottom-10 duration-700">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[800px]">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[800px]" ref={reportRef}>
             
             {/* Left Column: Physiological DNA (Profile Card) */}
             <div className="lg:col-span-4 space-y-6">

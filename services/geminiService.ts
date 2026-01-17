@@ -39,7 +39,7 @@ const getAIInstance = () => {
   
   if (!apiKey) {
     console.error("Critical Error: VITE_WORKOUT_GEMINI_API not found.");
-    throw new Error("系統配置錯誤：缺少 AI API 金鑰");
+    throw new Error("System Configuration Error: API Key Missing");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -147,19 +147,23 @@ export const analyzeFoodImage = async (base64Image: string, profile: UserProfile
 
   return callAIWithRetry(async () => {
     const ai = getAIInstance();
+    // 優化提示詞：要求更具體的菜單名稱與嚴格的 JSON 格式
     const prompt = `
-      辨識圖中食物。
-      請依照台灣食品營養標示法規（每份或每100公克）估算熱量與營養素。
-      回傳 JSON 格式：
+      任務：辨識圖中食物並估算營養。
+      
+      要求：
+      1. 名稱 (name)：請給出具體、像餐廳菜單的描述性名稱。例如：「義式迷迭香烤雞腿排」而非「雞腿」，「美式起司牛肉漢堡餐」而非「漢堡」。
+      2. 數值：依照台灣常見份量估算熱量與三大營養素。
+      3. 格式：僅回傳純 JSON 字串，不要 Markdown 標記 (\`\`\`json)。
+
+      JSON 結構：
       {
-        "name": "食物名稱 (繁體中文)",
-        "calories": 總熱量(整數),
-        "protein": 蛋白質克數(整數),
-        "carbs": 碳水化合物克數(整數),
-        "fat": 脂肪克數(整數)
+        "name": "描述性食物名稱 (繁體中文)",
+        "calories": 總熱量(數值),
+        "protein": 蛋白質克數(數值),
+        "carbs": 碳水化合物克數(數值),
+        "fat": 脂肪克數(數值)
       }
-      若無法辨識，回傳 null。
-      重要：只要回傳 JSON 字串，不要包含 \`\`\`json 或其他標記。
     `;
     
     const imagePart = {
@@ -169,14 +173,18 @@ export const analyzeFoodImage = async (base64Image: string, profile: UserProfile
       },
     };
 
-    // 使用 Standard Vision 模型 (Gemini 2.5 Flash Image)
     const response = await ai.models.generateContent({
       model: MODEL_STD_VISION,
       contents: { parts: [imagePart, { text: prompt }] },
       config: { temperature: 0.1 }
     });
 
-    const text = response.text?.trim() || "";
+    let text = response.text?.trim() || "";
+    
+    // 清理 Markdown 標記，確保 JSON.parse 能成功
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    // 嘗試提取 JSON
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
        console.error("AI Response invalid format:", text);
@@ -187,7 +195,22 @@ export const analyzeFoodImage = async (base64Image: string, profile: UserProfile
     const isPremium = profile.role === 'admin' || profile.memberId === 'admin_roots';
     if (!isPremium) incrementQuota('food');
 
-    return JSON.parse(jsonMatch[0]);
+    try {
+       const parsed = JSON.parse(jsonMatch[0]);
+       // 強制轉型為數字，避免 AI 回傳字串
+       return {
+         name: parsed.name,
+         macros: {
+           calories: Number(parsed.calories) || Number(parsed.macros?.calories) || 0,
+           protein: Number(parsed.protein) || Number(parsed.macros?.protein) || 0,
+           carbs: Number(parsed.carbs) || Number(parsed.macros?.carbs) || 0,
+           fat: Number(parsed.fat) || Number(parsed.macros?.fat) || 0,
+         }
+       };
+    } catch (e) {
+       console.error("JSON Parse Error", e);
+       return null;
+    }
   });
 };
 
@@ -229,7 +252,8 @@ export const calculateAiNutritionPlan = async (
          config: { temperature: 0.2 }
       });
 
-      const text = response.text?.trim() || "";
+      let text = response.text?.trim() || "";
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Invalid JSON");
 
