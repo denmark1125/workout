@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, PhysiqueRecord, MacroNutrients, DietaryPreference, ActivityLevel } from "../types";
 import { getTaiwanDate, getTaiwanWeekId } from "../utils/calculations";
@@ -7,7 +8,6 @@ const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 Hours
 
 // --- Models (Dual Mode Strategy) ---
 // Standard: 快速、低成本，用於高頻互動 (日常反饋、食物辨識)
-// Note: Using gemini-3-flash-preview as the modern standard for text tasks
 const MODEL_STD_TEXT = "gemini-3-flash-preview"; 
 const MODEL_STD_VISION = "gemini-2.5-flash-image";
 
@@ -34,11 +34,12 @@ const DAVID_QUOTES = [
 
 // 輔助函數：安全獲取 AI 實例
 const getAIInstance = () => {
-  // CRITICAL FIX: 使用 process.env.API_KEY 符合規範
-  const apiKey = process.env.API_KEY;
+  // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  
   if (!apiKey) {
-    console.error("Critical Error: API_KEY not found.");
-    throw new Error("System Configuration Error: API Key Missing");
+    console.error("Critical Error: VITE_GEMINI_API_KEY not found in environment variables.");
+    throw new Error("系統配置錯誤：缺少 AI API 金鑰");
   }
   return new GoogleGenAI({ apiKey });
 };

@@ -262,10 +262,13 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
               <ShieldCheck size={14} className="text-lime-600" /> 隱私與數據安全 (Security)
             </h3>
             <div className="space-y-4">
+               {/* 體態照片隱私 */}
                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-black text-black uppercase">診斷照片雲端同步</p>
-                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">管理端可見</p>
+                    <p className="text-xs font-black text-black uppercase">體態分析上傳</p>
+                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">
+                      {privacy.syncPhysiqueImages ? '僅上傳分析文字 (照片留存本地)' : '完全停止雲端同步 (本地模式)'}
+                    </p>
                   </div>
                   <button 
                     onClick={() => handlePrivacyToggle('syncPhysiqueImages')}
@@ -275,10 +278,11 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
                   </button>
                </div>
 
+               {/* 一般數據隱私 */}
                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-black text-black uppercase">生理矩陣雲端備份</p>
-                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">跨裝置存取</p>
+                    <p className="text-xs font-black text-black uppercase">健身與飲食數據同步</p>
+                    <p className="text-[9px] text-gray-400 font-bold leading-tight mt-1">含訓練日誌、飲食紀錄、身體數值</p>
                   </div>
                   <button 
                     onClick={() => handlePrivacyToggle('syncMetrics')}

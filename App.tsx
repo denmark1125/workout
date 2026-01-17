@@ -143,10 +143,10 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated]);
 
-  // 1. 下載資料 (Data Fetching)
+  // 1. 下載資料 (Data Fetching with Smart Merge)
   useEffect(() => {
     const initializeCloudData = async () => {
-      if (!db || !isAuthenticated || !currentMemberId) return;
+      if (!isAuthenticated || !currentMemberId) return;
       setIsSyncing(true);
       try {
         const [p, m, l, ph, dlogs] = await Promise.all([
@@ -181,7 +181,6 @@ const App: React.FC = () => {
              setShowRewardModal(true);
 
              setIsBriefingLoading(true);
-             // Note: getDailyBriefing doesn't use the ref because it's triggered by a specific condition (modal open)
              getDailyBriefing(updatedProfile, updatedProfile.loginStreak || 1)
                .then(briefing => setDailyBriefing(briefing))
                .finally(() => setIsBriefingLoading(false));
@@ -209,7 +208,7 @@ const App: React.FC = () => {
         if (dlogs) setDietLogs(dlogs);
         
       } catch (e) { 
-        console.warn("同步失敗", e); 
+        console.warn("同步失敗 (可能為離線狀態，已使用本地緩存)", e); 
       } finally { 
         setIsSyncing(false);
         setIsDataLoaded(true); 
@@ -218,26 +217,46 @@ const App: React.FC = () => {
     initializeCloudData();
   }, [isAuthenticated, currentMemberId]);
 
-  // 2. 自動上傳 (Auto-Sync)
+  // 2. 自動上傳 (Auto-Sync) with Hybrid Privacy Logic
   useEffect(() => {
     if (!isDataLoaded || !isAuthenticated || !currentMemberId || (isAdmin && currentMemberId !== 'admin_roots')) return;
     
     const timer = setTimeout(() => {
-      syncToCloud('profiles', profile, currentMemberId);
+      // 1. Profile: Always Sync (Metadata)
+      syncToCloud('profiles', profile, currentMemberId, true);
 
-      if (profile.privacySettings?.syncMetrics) {
-        syncToCloud('metrics', metrics, currentMemberId);
-      }
+      // 2. Data Categories: Controlled by Sync Metrics/Data switch
+      // User request: "Unless privacy is closed, then stop accessing diet/fitness/body values"
+      // We interpret syncMetrics as the master switch for data.
+      const shouldSyncData = profile.privacySettings?.syncMetrics ?? true;
+      syncToCloud('metrics', metrics, currentMemberId, shouldSyncData);
+      syncToCloud('logs', logs, currentMemberId, shouldSyncData);
+      syncToCloud('diet', dietLogs, currentMemberId, shouldSyncData);
       
-      syncToCloud('logs', logs, currentMemberId);
-      syncToCloud('diet', dietLogs, currentMemberId);
+      // 3. Physique: Special Hybrid Handling
+      // User request: "Store locally only, do not force upload (unless privacy closed)"
+      // Strategy: 
+      // - We ALWAYS save full data (with images) to LocalStorage via syncToCloud's first step.
+      // - We create a 'stripped' version (no images) for the cloud.
+      // - If privacy is ON (syncPhysiqueImages=true), we upload the STRIPPED version to cloud.
+      // - If privacy is OFF, we upload nothing to cloud (Local Only).
       
-      if (profile.privacySettings?.syncPhysiqueImages) {
-        syncToCloud('physique', physiqueRecords, currentMemberId);
+      const shouldSyncPhysique = profile.privacySettings?.syncPhysiqueImages ?? true;
+      
+      if (shouldSyncPhysique) {
+        // Create Cloud-Safe Version (Remove Images)
+        const cloudSafePhysique = physiqueRecords.map(r => ({
+           ...r,
+           image: "" // Strip image data to save bandwidth and privacy
+        }));
+        
+        // syncToCloud(collection, localFullData, id, enableCloud, cloudOverrideData)
+        syncToCloud('physique', physiqueRecords, currentMemberId, true, cloudSafePhysique);
       } else {
-        const textOnlyRecords = physiqueRecords.map(r => ({ ...r, image: "LOCAL_ONLY_HIDDEN" }));
-        syncToCloud('physique', textOnlyRecords, currentMemberId);
+        // Local Only Mode (Don't upload anything)
+        syncToCloud('physique', physiqueRecords, currentMemberId, false);
       }
+
     }, 2000);
 
     return () => clearTimeout(timer);
