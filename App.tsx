@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar.tsx';
 import MobileNav from './components/MobileNav.tsx';
 import AuthScreen from './components/AuthScreen.tsx';
@@ -10,15 +10,12 @@ import Settings from './components/Settings.tsx';
 import TrainingJournal from './components/TrainingJournal.tsx';
 import AdminPanel from './components/AdminPanel.tsx';
 import RewardVault from './components/RewardVault.tsx'; 
-import DailyRewardModal from './components/DailyRewardModal.tsx';
-import Onboarding from './components/Onboarding.tsx'; 
 import NutritionDeck from './components/NutritionDeck.tsx'; 
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog, WeeklyReportData } from './types.ts';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService.ts';
-import { getDailyBriefing, getLocalDavidGreeting } from './services/geminiService.ts'; 
+import { getLocalDavidGreeting } from './services/geminiService.ts'; 
 import { getLocalTimestamp } from './utils/calculations.ts';
-import { REWARDS_DATABASE } from './utils/rewardAssets.tsx';
-import { Loader2, Terminal, Cloud, CloudOff, AlertTriangle, ShieldOff } from 'lucide-react';
+import { Loader2, Cloud, CloudOff, AlertTriangle, ShieldOff, Zap } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -156,37 +153,43 @@ const App: React.FC = () => {
     <div className="flex min-h-screen bg-white">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} profile={profile} />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
-        {/* 黑色標題區：純淨教練指令區 */}
-        <div className="bg-black text-[#bef264] px-8 py-5 flex items-center gap-4 z-20 sticky top-0 shrink-0 border-b border-white/5 relative">
-           <div className="animate-pulse shrink-0"><Terminal size={18} /></div>
-           <div className="flex-1 min-w-0 pr-32">
-             <p className="text-[9px] font-black uppercase text-gray-500 mb-0.5 tracking-widest leading-none">David 教練戰術指令 COMMAND_STREAM</p>
-             <p className="text-sm md:text-base font-bold font-mono truncate max-w-full">{davidGreeting || '正在讀取戰術指令...'}</p>
+        {/* 頂部精緻狀態列：修正比例 */}
+        <div className="bg-black text-[#bef264] px-4 py-2.5 flex items-center gap-3 z-20 sticky top-0 shrink-0 border-b border-white/10 shadow-lg">
+           {/* AI 狀態燈 */}
+           <div className="flex items-center gap-1.5 shrink-0">
+              <Zap size={12} className="text-[#bef264] animate-pulse" />
+              <div className="w-[1px] h-3 bg-white/20"></div>
            </div>
            
-           {/* 連線狀態標籤：移至絕對定位右上角，不遮擋文字 */}
-           <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden md:block">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded border border-white/10 backdrop-blur-sm shadow-xl">
-                {!syncEnabled ? (
-                  <div className="flex items-center gap-1.5 text-gray-400"><ShieldOff size={11} /><span className="text-[8px] font-black uppercase tracking-widest">隱私模式</span></div>
-                ) : syncError ? (
-                  <div className="flex items-center gap-1.5 text-red-500"><AlertTriangle size={11} className="animate-pulse" /><span className="text-[8px] font-black uppercase tracking-widest">同步異常</span></div>
-                ) : isSyncing ? (
-                  <div className="flex items-center gap-1.5 text-lime-400"><Loader2 size={11} className="animate-spin" /><span className="text-[8px] font-black uppercase tracking-widest">同步中</span></div>
-                ) : dbConnected ? (
-                  <div className="flex items-center gap-1.5 text-[#bef264] opacity-80"><Cloud size={11} /><span className="text-[8px] font-black uppercase tracking-widest">連線 ONLINE</span></div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-gray-400"><CloudOff size={11} /><span className="text-[8px] font-black uppercase tracking-widest">離線</span></div>
-                )}
-              </div>
+           {/* 指令文字：騰出空間 */}
+           <div className="flex-1 min-w-0 pr-6">
+             <p className="text-[10px] md:text-xs font-bold font-mono truncate text-white/90">
+                <span className="text-[#bef264]/70 mr-1.5">[SYS_SYNC]</span>
+                {davidGreeting || '正在校準核心...'}
+             </p>
+           </div>
+           
+           {/* 資料庫與同步狀態燈 */}
+           <div className="flex items-center gap-2 shrink-0">
+              {!syncEnabled ? (
+                <ShieldOff size={12} className="text-gray-600" />
+              ) : syncError ? (
+                <AlertTriangle size={12} className="text-red-500 animate-pulse" />
+              ) : isSyncing ? (
+                <Loader2 size={12} className="text-[#bef264] animate-spin" />
+              ) : dbConnected ? (
+                <Cloud size={12} className="text-[#bef264] drop-shadow-[0_0_5px_rgba(190,242,100,0.5)]" />
+              ) : (
+                <CloudOff size={12} className="text-gray-600" />
+              )}
            </div>
         </div>
 
-        <div className="flex-1 px-4 md:px-16 py-6 md:py-10 pb-32">
+        <div className="flex-1 px-4 md:px-8 py-5 md:py-6 pb-32">
           {!isDataLoaded && (
-            <div className="fixed inset-0 z-50 bg-white/80 flex flex-col items-center justify-center">
-              <Loader2 className="w-10 h-10 animate-spin text-black mb-4" />
-              <p className="text-xs font-black uppercase tracking-widest text-gray-500">雲端數據初始化中...</p>
+            <div className="fixed inset-0 z-50 bg-white/90 flex flex-col items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-black mb-3" />
+              <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">LOADING_MATRIX_DATA</p>
             </div>
           )}
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}

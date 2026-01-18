@@ -143,7 +143,8 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
       return;
     }
     setTestStatus('TESTING');
-    const result = await testConnection(profile.role);
+    // Fix: testConnection expects 0 arguments, removing the incorrectly passed profile.role argument.
+    const result = await testConnection();
     setTestStatus(result ? 'SUCCESS' : 'FAIL');
     setTimeout(() => setTestStatus('IDLE'), 3000);
   };
