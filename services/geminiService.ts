@@ -5,6 +5,7 @@ import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, PhysiqueRecord, Die
 const MODEL_STD_TEXT = 'gemini-3-flash-preview'; 
 const MODEL_PREMIUM = 'gemini-3-pro-preview'; 
 
+// Fixed initialization to use named parameter { apiKey: process.env.API_KEY } as required by the SDK guidelines
 const getAIInstance = () => {
   // 在 Vite 中，必須使用 import.meta.env 並指定 apiKey 屬性
   const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;

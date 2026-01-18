@@ -109,7 +109,7 @@ const TacticalLoader: React.FC<TacticalLoaderProps> = ({ title = "David 教練�
              </div>
              {logs.map((log, i) => (
                 <p key={i} className={`text-[8px] font-mono text-left uppercase transition-opacity ${i === logs.length - 1 ? 'text-white opacity-100' : 'text-gray-500 opacity-30'}`}>
-                  > {log}
+                  {"> "} {log}
                 </p>
              ))}
              <p className="text-[10px] font-mono font-black text-[#bef264] uppercase tracking-[0.2em] pt-2 animate-pulse border-t border-white/5">

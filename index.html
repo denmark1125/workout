@@ -44,6 +44,13 @@
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; }
     input[type="number"]::-webkit-inner-spin-button { display: none; }
+    
+    /* 隱藏原生時間與日期圖標，避免雙重時鐘問題 */
+    input[type="time"]::-webkit-calendar-picker-indicator,
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      display: none;
+      -webkit-appearance: none;
+    }
   </style>
 <script type="importmap">
 {

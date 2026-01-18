@@ -2,7 +2,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkoutLog, WorkoutExercise, UserProfile, ExerciseType } from '../types';
 import { getTaiwanDate } from '../utils/calculations';
-import { Clock, Trash2, Zap, History, Dumbbell, Activity, Plus, ChevronRight, History as HistoryIcon, ClipboardList, Flame, Terminal, Hash, Edit3 } from 'lucide-react';
+// Added X icon to the imports list
+import { Clock, Trash2, Zap, History, Dumbbell, Activity, Plus, ChevronRight, History as HistoryIcon, ClipboardList, Flame, Terminal, Hash, Edit3, X } from 'lucide-react';
 
 interface TrainingJournalProps {
   logs: WorkoutLog[];
@@ -35,7 +36,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
   const focusPresets = ['胸', '背', '腿', '肩', '手', '二頭', '三頭', '核心', '有氧', '拉伸'];
   
   const exerciseLibrary = {
-    STRENGTH: ['槓鈴臥推', '上斜臥推', '啞鈴臥推', '臥推機', 'CABLE夾胸', 'CABLE纜繩下拉', 'CABLE單側夾胸', '蝴蝶機', '深蹲', '硬舉', '引體向上', '滑輪下拉', '啞鈴肩推'],
+    STRENGTH: ['槓鈴臥推', '上斜臥推', '啞鈴臥推', '臥推機', 'CABLE夾胸', 'CABLE單側夾胸', '蝴蝶機', '深蹲', '硬舉', '引體向上', '滑輪下拉', '啞鈴肩推'],
     CARDIO: ['跑步機', '飛輪', '橢圓機', '划船機', '跳繩', '波比跳']
   };
 
@@ -113,7 +114,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
            <div className="w-12 h-12 bg-black text-[#bef264] flex items-center justify-center rounded shadow-md"><Zap size={24}/></div>
            <div>
               <h2 className="text-2xl font-black tracking-tighter uppercase leading-none text-black">訓練戰報登錄</h2>
-              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-[0.2em] mt-1">LOG_SYSTEM_V4.8_STABLE</p>
+              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-[0.2em] mt-1">LOG_SYSTEM_V4.9_PRO_FIX</p>
            </div>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
@@ -133,43 +134,45 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
         {/* 左側：核心輸入 */}
         <div className="lg:col-span-7 space-y-8">
            
-           {/* 時間輸入：修正跑版問題，確保文字與圖標在一行 */}
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-gray-100 shadow-sm group">
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">開始時間 START</p>
-                 <div className="bg-white px-5 py-4 rounded-2xl flex items-center justify-between border border-gray-100 group-focus-within:border-black transition-all">
+           {/* 時間輸入：修正跑版與重複圖標問題 */}
+           <div className="grid grid-cols-2 gap-3 md:gap-4">
+              <div className="bg-gray-50/50 p-4 md:p-5 rounded-[2rem] border border-gray-100 shadow-sm group">
+                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">開始 START</p>
+                 <div className="bg-white px-4 py-3 md:py-4 rounded-2xl flex items-center justify-between border border-gray-100 group-focus-within:border-black transition-all overflow-hidden">
                     <input 
                       type="time" 
                       value={startTime} 
                       onChange={e => setStartTime(e.target.value)} 
-                      className="flex-1 text-3xl font-black font-mono bg-transparent text-black outline-none min-w-0" 
+                      className="flex-1 text-2xl md:text-3xl font-black font-mono bg-transparent text-black outline-none min-w-0" 
+                      style={{ WebkitAppearance: 'none' }}
                     />
-                    <Clock className="text-black shrink-0 ml-3" size={24} />
+                    <Clock className="text-black shrink-0 ml-2 hidden sm:block opacity-20" size={20} />
                  </div>
               </div>
-              <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-gray-100 shadow-sm group">
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">結束時間 END</p>
-                 <div className="bg-white px-5 py-4 rounded-2xl flex items-center justify-between border border-gray-100 group-focus-within:border-black transition-all">
+              <div className="bg-gray-50/50 p-4 md:p-5 rounded-[2rem] border border-gray-100 shadow-sm group">
+                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">結束 END</p>
+                 <div className="bg-white px-4 py-3 md:py-4 rounded-2xl flex items-center justify-between border border-gray-100 group-focus-within:border-black transition-all overflow-hidden">
                     <input 
                       type="time" 
                       value={endTime} 
                       onChange={e => setEndTime(e.target.value)} 
-                      className="flex-1 text-3xl font-black font-mono bg-transparent text-black outline-none min-w-0" 
+                      className="flex-1 text-2xl md:text-3xl font-black font-mono bg-transparent text-black outline-none min-w-0" 
+                      style={{ WebkitAppearance: 'none' }}
                     />
-                    <Clock className="text-black shrink-0 ml-3" size={24} />
+                    <Clock className="text-black shrink-0 ml-2 hidden sm:block opacity-20" size={20} />
                  </div>
               </div>
            </div>
 
-           {/* 訓練焦點：加入自定義欄位 */}
+           {/* 訓練焦點：優化自定義輸入，確保美觀 */}
            <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">訓練焦點 TARGET (可複選)</p>
-              <div className="flex flex-wrap gap-2">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">訓練焦點 TARGET (可複選 / 自定義)</p>
+              <div className="flex flex-wrap gap-2 items-center">
                  {focusPresets.map(f => (
                    <button 
                      key={f} 
                      onClick={() => toggleFocus(f)} 
-                     className={`px-5 py-2.5 text-xs font-black rounded-xl border transition-all ${selectedFocus.includes(f) ? 'bg-black text-[#bef264] border-black shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-black hover:text-black'}`}
+                     className={`px-4 py-2 text-[11px] font-black rounded-xl border transition-all ${selectedFocus.includes(f) ? 'bg-black text-[#bef264] border-black shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-black hover:text-black'}`}
                    >
                      {f}
                    </button>
@@ -178,21 +181,21 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                    <button 
                      key={f} 
                      onClick={() => toggleFocus(f)} 
-                     className="px-5 py-2.5 text-xs font-black rounded-xl border bg-black text-[#bef264] border-black shadow-md"
+                     className="px-4 py-2 text-[11px] font-black rounded-xl border bg-black text-[#bef264] border-black shadow-md flex items-center gap-2 group"
                    >
-                     {f}
+                     {f} <X className="w-3 h-3 text-white/30 group-hover:text-white" size={12} />
                    </button>
                  ))}
-                 {/* 自定義輸入框 */}
-                 <div className="flex items-center bg-gray-50 border border-dashed border-gray-300 rounded-xl px-3 group focus-within:border-black transition-all">
+                 {/* 自定義輸入框：始終可見的互動區域 */}
+                 <div className="flex items-center bg-gray-50 border border-dashed border-gray-300 rounded-xl px-3 group focus-within:border-black focus-within:bg-white transition-all ml-1">
                     <input 
                       placeholder="自定義..." 
                       value={customFocus}
                       onChange={e => setCustomFocus(e.target.value)}
                       onKeyPress={e => e.key === 'Enter' && handleAddCustomFocus()}
-                      className="bg-transparent text-xs font-black py-2.5 outline-none w-20 group-focus-within:w-28 transition-all text-black placeholder:text-gray-300"
+                      className="bg-transparent text-[11px] font-black py-2 outline-none w-16 group-focus-within:w-28 transition-all text-black placeholder:text-gray-300"
                     />
-                    <button onClick={handleAddCustomFocus} className="text-gray-300 group-focus-within:text-black transition-colors"><Plus size={14}/></button>
+                    <button onClick={handleAddCustomFocus} className="text-gray-300 group-focus-within:text-black hover:scale-110 transition-all"><Plus size={14}/></button>
                  </div>
               </div>
            </div>
@@ -211,7 +214,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                  ))}
               </div>
 
-              {/* 動作名稱：強化自動帶入 */}
+              {/* 動作名稱 */}
               <div className="space-y-4 relative">
                  <div className="bg-gray-50/50 p-12 border-b-4 border-black flex items-center justify-center min-h-[160px] rounded-t-3xl relative group transition-all focus-within:bg-white">
                     <input 
@@ -229,7 +232,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
                        {suggestions.map(s => (
                           <button key={s} onClick={() => applyLastTrainingData(s)} className="w-full text-left px-6 py-5 text-sm font-black hover:bg-black hover:text-[#bef264] transition-all border-b border-gray-50 last:border-0 flex justify-between items-center group">
                              <span>{s}</span>
-                             <span className="text-[9px] text-gray-300 font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Auto-Load Previous</span>
+                             <span className="text-[9px] text-gray-300 font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">帶入上次數據</span>
                           </button>
                        ))}
                     </div>
@@ -255,7 +258,7 @@ const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpd
               {/* 組數選擇器 */}
               <div className="space-y-5">
                  <div className="flex justify-between items-end px-4">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">組數 SETS_COUNT</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">組數 SETS</p>
                     <p className="text-5xl font-black font-mono leading-none text-black">{exSets} <span className="text-sm font-black text-gray-300 ml-1">組</span></p>
                  </div>
                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 px-2">
