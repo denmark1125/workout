@@ -27,9 +27,9 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
 
   const [input, setInput] = useState({ 
     date: getTaiwanDate(),
-    weight: latest.weight, 
-    bodyFat: latest.bodyFat, 
-    muscleMass: latest.muscleMass || ''
+    weight: latest.weight.toString(), 
+    bodyFat: latest.bodyFat.toString(), 
+    muscleMass: latest.muscleMass.toString()
   });
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -38,11 +38,9 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
     if (isSyncing) return;
     setIsSyncing(true);
     
-    const weightVal = Number(input.weight) || 0;
-    const bodyFatVal = Number(input.bodyFat) || 0;
-    const mMass = input.muscleMass === '' 
-      ? Number((weightVal * (1 - bodyFatVal / 100) * 0.5).toFixed(1))
-      : Number(input.muscleMass);
+    const weightVal = parseFloat(input.weight) || 0;
+    const bodyFatVal = parseFloat(input.bodyFat) || 0;
+    const muscleVal = parseFloat(input.muscleMass) || 0;
 
     const fullTimestamp = input.date === getTaiwanDate() ? getLocalTimestamp() : `${input.date} 12:00`;
 
@@ -52,103 +50,94 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
         date: fullTimestamp,
         weight: weightVal,
         bodyFat: bodyFatVal,
-        muscleMass: mMass
+        muscleMass: muscleVal
       });
       setIsSyncing(false);
-      setInput({ ...input, muscleMass: '' });
     }, 800);
   };
 
   return (
-    <div className="animate-in fade-in duration-700 space-y-8 pb-32">
-      <header className="border-b border-black pb-4">
-        <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-[0.4em] mb-1">Tactical Data Center</p>
-        <h1 className="text-3xl font-black tracking-tighter text-black uppercase">數據矩陣</h1>
+    <div className="animate-in fade-in duration-700 space-y-6 pb-32 max-w-6xl mx-auto">
+      <header className="border-b-2 border-black pb-4">
+        <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-[0.4em] mb-1">Biological Matrix Dashboard</p>
+        <h1 className="text-3xl font-black tracking-tighter text-black uppercase">數據矩陣中心</h1>
       </header>
 
-      {/* 數據卡片 - 調小比例 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* 數據卡片 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'BMI INDEX', v: calculated.bmi.toFixed(1), s: getBMIStatus(calculated.bmi), c: 'bg-[#bef264]' },
-          { label: 'BMR RATE', v: Math.round(calculated.bmr), s: null, c: 'bg-blue-400' },
+          { label: 'BMR RATE', v: Math.round(calculated.bmr), s: { label: 'KCAL/DAY', color: 'text-gray-400' }, c: 'bg-blue-400' },
           { label: 'FFMI LEVEL', v: calculated.ffmi.toFixed(1), s: getFFMIStatus(calculated.ffmi, profile.gender), c: 'bg-purple-400' },
-          { label: 'SCORE', v: Math.round(calculated.score), s: { label: '穩定', color: 'text-black' }, c: 'bg-orange-400' },
+          { label: '核心評分', v: Math.round(calculated.score), s: { label: '戰力穩定', color: 'text-lime-600' }, c: 'bg-black' },
         ].map((card, i) => (
-          <div key={i} className="bg-white border border-gray-100 p-4 rounded-sm shadow-sm hover:border-black transition-all">
-             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mb-1">{card.label}</span>
-             <div className="flex items-baseline gap-2 mb-1">
-                <span className="text-xl font-black text-black tracking-tighter">{card.v}</span>
-                {card.s && <span className={`hidden md:inline-block text-[8px] font-bold uppercase px-1 border ${card.s.color}`}>{card.s.label.split(' ')[0]}</span>}
+          <div key={i} className="bg-white border border-gray-100 p-5 rounded-xl shadow-sm hover:border-black transition-all group overflow-hidden relative">
+             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">{card.label}</span>
+             <div className="flex items-baseline gap-2 mb-2">
+                <span className="text-2xl font-black text-black tracking-tighter leading-none">{card.v}</span>
+                {card.s && <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 border rounded-full ${card.s.color}`}>{card.s.label}</span>}
              </div>
-             <div className="h-0.5 w-full bg-gray-50 rounded-full overflow-hidden">
-                <div className={`h-full ${card.c} w-2/3 transition-all duration-1000`}></div>
+             <div className="h-1 w-full bg-gray-50 rounded-full overflow-hidden">
+                <div className={`h-full ${card.c} transition-all duration-1000`} style={{ width: `${Math.min(100, (Number(card.v)/ (card.label.includes('BMR') ? 2500 : 35)) * 100)}%` }}></div>
              </div>
           </div>
         ))}
       </div>
 
-      {/* 生理數據提交 - 復原肌肉量，調整字體 */}
-      <div className="bg-white border border-gray-100 p-6 rounded-sm shadow-sm">
-        <div className="flex items-center gap-2 mb-6 border-b border-gray-50 pb-3">
-           <Activity size={16} className="text-black" />
-           <h2 className="text-xs font-bold uppercase tracking-widest text-gray-800">生理數據提交 UPDATE_METRICS</h2>
+      <div className="bg-black text-white p-8 rounded-2xl shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-[#bef264] blur-[80px] opacity-10 rounded-full"></div>
+        <div className="flex items-center gap-3 mb-6 border-b border-white/10 pb-4">
+           <Activity size={18} className="text-[#bef264]" />
+           <h2 className="text-xs font-black uppercase tracking-widest text-white">生理數據更新 UPDATE_BIOMETRICS</h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
-           <div className="space-y-1">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                 <Calendar size={10} /> 日期
-              </label>
-              <input type="date" value={input.date} onChange={e => setInput({...input, date: e.target.value})} className="w-full bg-gray-50 border-b border-gray-200 p-2 text-sm font-bold outline-none focus:border-black transition-all" />
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end relative z-10">
+           <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2"><Calendar size={12}/> 日期 DATE</label>
+              <input type="date" value={input.date} onChange={e => setInput({...input, date: e.target.value})} className="w-full bg-white/5 border-b border-white/10 p-2 text-sm font-bold outline-none focus:border-[#bef264] transition-all text-white" />
            </div>
-           <div className="space-y-1">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                 <Scale size={10} /> 體重 (KG)
-              </label>
-              <input type="number" step="0.1" required value={input.weight} onChange={e => setInput({...input, weight: e.target.value as any})} className="w-full bg-gray-50 border-b border-gray-200 p-2 text-lg font-black outline-none focus:border-black transition-all font-mono" />
+           <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2"><Scale size={14} /> 體重 WEIGHT (KG)</label>
+              <input type="number" step="0.1" required value={input.weight} onChange={e => setInput({...input, weight: e.target.value})} className="w-full bg-white/5 border-b border-white/10 p-2 text-2xl font-black outline-none focus:border-[#bef264] transition-all font-mono text-white" />
            </div>
-           <div className="space-y-1">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                 <Activity size={10} /> 體脂 (%)
-              </label>
-              <input type="number" step="0.1" required value={input.bodyFat} onChange={e => setInput({...input, bodyFat: e.target.value as any})} className="w-full bg-gray-50 border-b border-gray-200 p-2 text-lg font-black outline-none focus:border-black transition-all font-mono" />
+           <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">體脂 FAT (%)</label>
+              <input type="number" step="0.1" required value={input.bodyFat} onChange={e => setInput({...input, bodyFat: e.target.value})} className="w-full bg-white/5 border-b border-white/10 p-2 text-2xl font-black outline-none focus:border-[#bef264] transition-all font-mono text-white" />
            </div>
-           <div className="space-y-1">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                 <Target size={10} /> 肌肉量 (KG)
-              </label>
-              <input type="number" step="0.1" value={input.muscleMass} onChange={e => setInput({...input, muscleMass: e.target.value as any})} placeholder="可選" className="w-full bg-gray-50 border-b border-gray-200 p-2 text-lg font-black outline-none focus:border-black transition-all font-mono" />
+           <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2"><Target size={12}/> 肌肉量 MUSCLE (KG)</label>
+              <input type="number" step="0.1" required value={input.muscleMass} onChange={e => setInput({...input, muscleMass: e.target.value})} className="w-full bg-white/5 border-b border-white/10 p-2 text-2xl font-black outline-none focus:border-[#bef264] transition-all font-mono text-white" />
            </div>
-           <button disabled={isSyncing} className="bg-black text-[#bef264] h-[46px] font-bold text-[10px] tracking-[0.2em] uppercase hover:bg-[#bef264] hover:text-black transition-all shadow-md active:scale-95 disabled:opacity-50">
-             {isSyncing ? 'SYNC...' : 'COMMIT'}
+           <button disabled={isSyncing} className="bg-[#bef264] text-black h-[52px] font-black text-[11px] tracking-[0.3em] uppercase hover:bg-white transition-all shadow-lg active:scale-95 disabled:opacity-50 rounded-xl">
+             {isSyncing ? 'UPLINK...' : 'INITIATE_SYNC'}
            </button>
         </form>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white border border-gray-100 p-5 min-h-[350px] flex flex-col rounded-sm">
-           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] mb-4 text-gray-400">戰力矩陣 RADAR</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm min-h-[400px] flex flex-col">
+           <h3 className="text-[10px] font-black uppercase tracking-[0.3em] mb-8 text-gray-400 border-b border-gray-50 pb-2">戰力維度 RADAR_MATRIX</h3>
            <div className="flex-1 w-full min-h-0">
              <ResponsiveContainer width="100%" height="100%">
                <RadarChart data={radarData}>
-                 <PolarGrid stroke="#f1f5f9" />
-                 <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} />
-                 <Radar name="Physique" dataKey="A" stroke="#000" strokeWidth={2} fill="#bef264" fillOpacity={0.6} />
+                 <PolarGrid stroke="#f1f5f9" strokeWidth={1} />
+                 <PolarAngleAxis dataKey="subject" tick={{ fill: '#000', fontSize: 11, fontWeight: 900 }} />
+                 <Radar name="Physique" dataKey="A" stroke="#000" strokeWidth={2} fill="#bef264" fillOpacity={0.7} />
                </RadarChart>
              </ResponsiveContainer>
            </div>
         </div>
-        <div className="bg-white border border-gray-100 p-5 min-h-[350px] flex flex-col rounded-sm">
-           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] mb-4 text-gray-400">進度趨勢 TREND</h3>
+        <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm min-h-[400px] flex flex-col">
+           <h3 className="text-[10px] font-black uppercase tracking-[0.3em] mb-8 text-gray-400 border-b border-gray-50 pb-2">進化趨勢 EVOLUTION_TREND</h3>
            <div className="flex-1 w-full min-h-0">
              <ResponsiveContainer width="100%" height="100%">
                <LineChart data={metrics.slice(-10)}>
                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                  <XAxis dataKey="date" hide />
                  <YAxis hide domain={['auto', 'auto']} />
-                 <Tooltip contentStyle={{ background: '#000', border: 'none', color: '#fff', borderRadius: '0', fontSize: '10px' }} />
-                 <Line type="monotone" dataKey="weight" stroke="#000" strokeWidth={2} dot={{ r: 3, fill: '#000' }} />
-                 <Line type="monotone" dataKey="bodyFat" stroke="#bef264" strokeWidth={2} dot={{ r: 3, fill: '#bef264' }} />
+                 <Tooltip contentStyle={{ background: '#000', border: 'none', color: '#fff', borderRadius: '12px', fontSize: '11px', fontWeight: '900' }} />
+                 <Line type="monotone" dataKey="weight" stroke="#000" strokeWidth={3} dot={{ r: 4, fill: '#000' }} />
+                 <Line type="monotone" dataKey="bodyFat" stroke="#bef264" strokeWidth={3} dot={{ r: 4, fill: '#bef264' }} />
                </LineChart>
              </ResponsiveContainer>
            </div>

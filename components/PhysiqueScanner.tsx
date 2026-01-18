@@ -99,7 +99,6 @@ const PhysiqueScanner: React.FC<{ profile: UserProfile; records: PhysiqueRecord[
     setLoading(true);
     setAnalysis(null);
     try {
-      // 確保傳輸 Base64
       const result = await getPhysiqueAnalysis(image, profile);
       setAnalysis(result);
       onAddRecord({
@@ -119,12 +118,11 @@ const PhysiqueScanner: React.FC<{ profile: UserProfile; records: PhysiqueRecord[
   return (
     <div className="space-y-10 max-w-7xl mx-auto pb-40 px-4">
       <header className="border-b border-black pb-6">
-        <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-[0.3em] mb-1">Visual Diagnostic Module</p>
+        <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-0.3em mb-1">Visual Diagnostic Module</p>
         <h2 className="text-3xl font-black tracking-tighter uppercase text-black">體態診斷</h2>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 bg-white border border-gray-100 shadow-xl rounded-sm overflow-hidden">
-        {/* 上傳區 */}
         <div className="lg:col-span-5 p-6 flex flex-col items-center bg-gray-50/20 border-r border-gray-100">
           <div 
             onClick={() => !loading && fileInputRef.current?.click()}
@@ -136,9 +134,7 @@ const PhysiqueScanner: React.FC<{ profile: UserProfile; records: PhysiqueRecord[
                 <img src={image} className="w-full h-full object-cover" alt="Physique" />
                 {loading && (
                   <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center">
-                    {/* 掃描線動畫 */}
                     <div className="w-full h-1 bg-[#bef264] absolute top-0 animate-[scan_3s_ease-in-out_infinite] shadow-[0_0_20px_#bef264] z-10"></div>
-                    
                     <div className="mt-4 flex flex-col items-center gap-3 z-20">
                        <Brain size={24} className="text-[#bef264] animate-pulse" />
                        <div className="space-y-1 text-center bg-black/60 px-4 py-2 rounded-sm border border-[#bef264]/20">
@@ -170,7 +166,6 @@ const PhysiqueScanner: React.FC<{ profile: UserProfile; records: PhysiqueRecord[
           </button>
         </div>
 
-        {/* 結果區 */}
         <div className="lg:col-span-7 p-8 md:p-12 flex flex-col min-h-[550px] bg-white">
           <div className="flex items-center gap-3 mb-8 pb-3 border-b border-gray-50">
              <ShieldCheck size={16} className="text-lime-500" />

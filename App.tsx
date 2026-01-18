@@ -156,25 +156,29 @@ const App: React.FC = () => {
     <div className="flex min-h-screen bg-white">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} profile={profile} />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
-        <div className="bg-black text-[#bef264] px-4 md:px-8 py-3 flex items-start gap-4 shadow-md z-20 sticky top-0 shrink-0 border-b border-white/5">
-           <div className="mt-0.5 animate-pulse"><Terminal size={16} /></div>
-           <div className="flex-1 overflow-hidden">
-             <p className="text-[10px] font-black uppercase text-gray-500 mb-0.5">David 教練：系統連線中</p>
-             <p className="text-sm font-bold font-mono truncate">{davidGreeting || '正在讀取戰術指令...'}</p>
+        {/* 黑色標題區：純淨教練指令區 */}
+        <div className="bg-black text-[#bef264] px-8 py-5 flex items-center gap-4 z-20 sticky top-0 shrink-0 border-b border-white/5 relative">
+           <div className="animate-pulse shrink-0"><Terminal size={18} /></div>
+           <div className="flex-1 min-w-0 pr-32">
+             <p className="text-[9px] font-black uppercase text-gray-500 mb-0.5 tracking-widest leading-none">David 教練戰術指令 COMMAND_STREAM</p>
+             <p className="text-sm md:text-base font-bold font-mono truncate max-w-full">{davidGreeting || '正在讀取戰術指令...'}</p>
            </div>
            
-           <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-sm border border-white/10">
-             {!syncEnabled ? (
-               <div className="flex items-center gap-2 text-gray-400"><ShieldOff size={14} /><span className="text-[10px] font-black uppercase tracking-widest">隱私模式 PRIVATE</span></div>
-             ) : syncError ? (
-               <div className="flex items-center gap-2 text-red-500"><AlertTriangle size={14} className="animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest">同步失敗 SYNC_ERR</span></div>
-             ) : isSyncing ? (
-               <div className="flex items-center gap-2 text-[#bef264]"><Loader2 size={14} className="animate-spin" /><span className="text-[10px] font-black uppercase tracking-widest">同步中 UPLOADING...</span></div>
-             ) : dbConnected ? (
-               <div className="flex items-center gap-2 text-[#bef264]"><Cloud size={14} /><span className="text-[10px] font-black uppercase tracking-widest">雲端連線 ONLINE</span></div>
-             ) : (
-               <div className="flex items-center gap-2 text-gray-500"><CloudOff size={14} /><span className="text-[10px] font-black uppercase tracking-widest">離線模式 OFFLINE</span></div>
-             )}
+           {/* 連線狀態標籤：移至絕對定位右上角，不遮擋文字 */}
+           <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden md:block">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded border border-white/10 backdrop-blur-sm shadow-xl">
+                {!syncEnabled ? (
+                  <div className="flex items-center gap-1.5 text-gray-400"><ShieldOff size={11} /><span className="text-[8px] font-black uppercase tracking-widest">隱私模式</span></div>
+                ) : syncError ? (
+                  <div className="flex items-center gap-1.5 text-red-500"><AlertTriangle size={11} className="animate-pulse" /><span className="text-[8px] font-black uppercase tracking-widest">同步異常</span></div>
+                ) : isSyncing ? (
+                  <div className="flex items-center gap-1.5 text-lime-400"><Loader2 size={11} className="animate-spin" /><span className="text-[8px] font-black uppercase tracking-widest">同步中</span></div>
+                ) : dbConnected ? (
+                  <div className="flex items-center gap-1.5 text-[#bef264] opacity-80"><Cloud size={11} /><span className="text-[8px] font-black uppercase tracking-widest">連線 ONLINE</span></div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-gray-400"><CloudOff size={11} /><span className="text-[8px] font-black uppercase tracking-widest">離線</span></div>
+                )}
+              </div>
            </div>
         </div>
 

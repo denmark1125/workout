@@ -5,7 +5,7 @@ import { UserProfile, FitnessGoal, FoodItem } from '../types.ts';
 import { FOOD_DATABASE } from '../utils/foodDatabase.ts';
 import { 
   Users, Trash2, Search, RefreshCcw, ShieldCheck, 
-  Utensils, CheckCircle, AlertTriangle, XCircle, Info, Tag, Store, User as UserIcon, ShieldAlert
+  Utensils, CheckCircle, AlertTriangle, XCircle, Info, Tag, Store, User as UserIcon, ShieldAlert, Edit3
 } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
@@ -41,6 +41,15 @@ const AdminPanel: React.FC = () => {
      alert("數據已校準，同步至全體矩陣。");
   };
 
+  const updateFoodMacro = (id: string, field: string, value: string) => {
+    setCurrentFoods(prev => prev.map(f => {
+      if (f.id === id) {
+        return { ...f, macros: { ...f.macros, [field]: parseInt(value) || 0 } };
+      }
+      return f;
+    }));
+  };
+
   return (
     <div className="space-y-16 max-w-7xl mx-auto pb-40 px-6">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-10 border-b-8 border-black pb-10">
@@ -50,7 +59,7 @@ const AdminPanel: React.FC = () => {
           </div>
           <div>
             <p className="text-xs font-mono font-black text-gray-400 uppercase tracking-[0.4em] mb-2">Root Terminal System</p>
-            <h2 className="text-5xl font-black text-black tracking-tighter uppercase leading-none text-black">管理中心</h2>
+            <h2 className="text-5xl font-black text-black tracking-tighter uppercase leading-none">管理中心</h2>
           </div>
         </div>
       </header>
@@ -114,28 +123,43 @@ const AdminPanel: React.FC = () => {
               </div>
            </div>
 
-           <div className="grid grid-cols-1 gap-4">
+           <div className="grid grid-cols-1 gap-6">
               {currentFoods.map(food => (
-                 <div key={food.id} className="bg-white border-2 border-gray-100 p-8 flex flex-col md:flex-row items-center justify-between gap-10 hover:border-black transition-all group rounded-sm shadow-sm">
-                    <div className="flex items-center gap-8 flex-1">
-                       <div className="w-20 h-20 bg-gray-50 text-black border border-gray-100 flex items-center justify-center font-black text-xs shrink-0 group-hover:bg-[#bef264] transition-colors">{food.category}</div>
-                       <div className="space-y-3">
-                          <div className="flex items-center gap-4">
-                             <h4 className="text-2xl font-black text-black tracking-tight">{food.name}</h4>
-                             {food.barcode && <span className="bg-gray-100 text-gray-500 px-3 py-1 text-[10px] font-mono font-bold flex items-center gap-2"><Tag size={12}/> {food.barcode}</span>}
-                          </div>
-                          <div className="flex flex-wrap gap-6">
-                             <div className="flex items-center gap-2 text-xs font-black text-gray-600 uppercase"><Store size={14} className="text-gray-300"/> {food.source || '用戶手動建立'}</div>
-                             <div className="flex items-center gap-2 text-xs font-black text-gray-300 uppercase"><UserIcon size={14}/> ROOT_ADMIN</div>
-                             <div className="text-[10px] font-mono font-bold text-gray-400 border-l border-gray-200 pl-6 uppercase">
-                                CALS:{food.macros.calories} / P:{food.macros.protein}g / C:{food.macros.carbs}g / F:{food.macros.fat}g
+                 <div key={food.id} className="bg-white border-2 border-gray-100 p-8 flex flex-col items-stretch gap-6 hover:border-black transition-all group rounded-2xl shadow-md">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                       <div className="flex items-center gap-6 flex-1">
+                          <div className="w-20 h-20 bg-gray-50 text-black border border-gray-100 flex items-center justify-center font-black text-xs shrink-0 group-hover:bg-[#bef264] transition-colors rounded-xl uppercase">{food.category}</div>
+                          <div className="space-y-2">
+                             <div className="flex items-center gap-4">
+                                <h4 className="text-2xl font-black text-black tracking-tight">{food.name}</h4>
+                                {food.barcode && <span className="bg-gray-100 text-gray-500 px-3 py-1 text-[10px] font-mono font-bold flex items-center gap-2"><Tag size={12}/> {food.barcode}</span>}
+                             </div>
+                             <div className="flex flex-wrap gap-6">
+                                <div className="flex items-center gap-2 text-xs font-black text-gray-600 uppercase"><Store size={14} className="text-gray-300"/> {food.source || '用戶手動建立'}</div>
+                                <div className="flex items-center gap-2 text-xs font-black text-gray-300 uppercase"><UserIcon size={14}/> ROOT_ADMIN</div>
                              </div>
                           </div>
                        </div>
+                       <div className="flex gap-3 w-full md:w-auto">
+                          <button onClick={() => handleApproveFood(food.id)} className="flex-1 md:flex-none px-8 py-4 bg-black text-[#bef264] text-[11px] font-black uppercase tracking-widest hover:bg-lime-400 hover:text-black transition-all rounded-xl shadow-lg">核准通核</button>
+                          <button onClick={() => handleDeleteFood(food.id)} className="flex-1 md:flex-none px-8 py-4 border-2 border-red-50 text-red-400 hover:bg-red-50 text-[11px] font-black uppercase tracking-widest transition-all rounded-xl">移除項目</button>
+                       </div>
                     </div>
-                    <div className="flex gap-4 w-full md:w-auto">
-                       <button onClick={() => handleApproveFood(food.id)} className="flex-1 md:flex-none px-10 py-5 bg-black text-[#bef264] text-[11px] font-black uppercase tracking-widest hover:bg-lime-400 hover:text-black transition-all shadow-lg">核准通核 APPROVE</button>
-                       <button onClick={() => handleDeleteFood(food.id)} className="flex-1 md:flex-none px-10 py-5 border-2 border-red-50 text-red-400 hover:bg-red-50 text-[11px] font-black uppercase tracking-widest transition-all">移除項目 DELETE</button>
+                    
+                    <div className="grid grid-cols-4 gap-4 bg-gray-50 p-6 rounded-xl border border-gray-100">
+                       {[
+                         {l:'熱量', f:'calories'}, {l:'蛋白質', f:'protein'}, {l:'碳水', f:'carbs'}, {l:'脂肪', f:'fat'}
+                       ].map(macro => (
+                          <div key={macro.f} className="space-y-2">
+                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Edit3 size={10}/> {macro.l}</label>
+                             <input 
+                               type="number" 
+                               value={food.macros[macro.f as keyof typeof food.macros]} 
+                               onChange={(e) => updateFoodMacro(food.id, macro.f, e.target.value)}
+                               className="w-full bg-white border border-gray-100 p-3 font-mono font-black text-lg rounded-lg outline-none focus:border-black"
+                             />
+                          </div>
+                       ))}
                     </div>
                  </div>
               ))}

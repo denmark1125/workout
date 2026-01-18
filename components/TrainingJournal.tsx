@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkoutLog, WorkoutExercise, UserProfile, ExerciseType } from '../types';
 import { getTaiwanDate } from '../utils/calculations';
-import { ChevronLeft, ChevronRight, Plus, X, Trash2, Clock, MessageSquare, Zap, Loader2, RotateCcw, History, Save, Edit2, Check, Tag, ChevronUp, ChevronDown, Activity, Dumbbell, Flame } from 'lucide-react';
+import { Clock, Trash2, Zap, History, Dumbbell, Activity, Plus, ChevronRight, History as HistoryIcon, ClipboardList, Flame, Terminal, Hash, Edit3 } from 'lucide-react';
 
 interface TrainingJournalProps {
   logs: WorkoutLog[];
@@ -15,594 +15,349 @@ interface TrainingJournalProps {
 
 const TrainingJournal: React.FC<TrainingJournalProps> = ({ logs, onAddLog, onUpdateLog, onDeleteLog, profile, onProfileUpdate }) => {
   const [selectedDate, setSelectedDate] = useState(getTaiwanDate());
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  
-  const [showCoachFeedback, setShowCoachFeedback] = useState(false);
-  const [feedbackMsg, setFeedbackMsg] = useState('');
-
-  // 登錄模組狀態
-  const [startTime, setStartTime] = useState("18:00");
-  const [endTime, setEndTime] = useState("19:00");
+  const [startTime, setStartTime] = useState("19:35");
+  const [endTime, setEndTime] = useState("20:45");
   const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
-  const [customFocusInput, setCustomFocusInput] = useState('');
-  const [userCustomFocuses, setUserCustomFocuses] = useState<string[]>([]);
-  const [feedback, setFeedback] = useState('');
-
-  // 動作輸入狀態
-  const [exerciseType, setExerciseType] = useState<ExerciseType>('STRENGTH'); // 新增類型切換
-  const [exName, setExName] = useState('');
+  const [customFocus, setCustomFocus] = useState('');
+  const [exerciseType, setExerciseType] = useState<ExerciseType>('STRENGTH');
   
-  // Strength Data
+  const [exName, setExName] = useState('');
   const [exWeight, setExWeight] = useState('');
   const [exReps, setExReps] = useState('');
+  const [exDuration, setExDuration] = useState('');
+  const [exIntensity, setExIntensity] = useState('中等');
   const [exSets, setExSets] = useState(1);
+  const [feedback, setFeedback] = useState('');
   
-  // Cardio Data
-  const [exDuration, setExDuration] = useState(''); // minutes
-  const [exDistance, setExDistance] = useState(''); // km
-  const [exIntensity, setExIntensity] = useState<'LOW'|'MED'|'HIGH'>('MED');
-
   const [pendingExercises, setPendingExercises] = useState<WorkoutExercise[]>([]);
-  
-  // 編輯歷史/暫存狀態
-  const [isEditingHistory, setIsEditingHistory] = useState<string | null>(null);
-  const [editingExId, setEditingExId] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const focusPresets = ['胸', '背', '腿', '肩', '手', '二頭', '三頭', '核心', '有氧', '拉伸'];
+  
+  const exerciseLibrary = {
+    STRENGTH: ['槓鈴臥推', '上斜臥推', '啞鈴臥推', '臥推機', 'CABLE夾胸', 'CABLE纜繩下拉', 'CABLE單側夾胸', '蝴蝶機', '深蹲', '硬舉', '引體向上', '滑輪下拉', '啞鈴肩推'],
+    CARDIO: ['跑步機', '飛輪', '橢圓機', '划船機', '跳繩', '波比跳']
+  };
 
-  // 1. 自動草稿恢復與存檔
-  useEffect(() => {
-    const savedDraft = localStorage.getItem(`matrix_draft_${profile.memberId}`);
-    if (savedDraft) {
-      try {
-        const draft = JSON.parse(savedDraft);
-        if (!isEditingHistory) {
-          setPendingExercises(draft.exercises || []);
-          setSelectedFocus(draft.selectedFocus || []);
-          setUserCustomFocuses(draft.userCustomFocuses || []);
-          setFeedback(draft.feedback || '');
-          setStartTime(draft.startTime || "18:00");
-          setEndTime(draft.endTime || "19:00");
-        }
-      } catch (e) { console.error("Draft restore failed"); }
-    }
-  }, [profile.memberId, isEditingHistory]);
+  const suggestions = useMemo(() => {
+    if (!exName) return [];
+    return exerciseLibrary[exerciseType].filter(name => name.includes(exName));
+  }, [exName, exerciseType]);
 
-  useEffect(() => {
-    if (isEditingHistory) return;
-    const draft = { exercises: pendingExercises, selectedFocus, userCustomFocuses, feedback, startTime, endTime };
-    localStorage.setItem(`matrix_draft_${profile.memberId}`, JSON.stringify(draft));
-  }, [pendingExercises, selectedFocus, userCustomFocuses, feedback, startTime, endTime, isEditingHistory]);
-
-  // 2. 智能動作建議
-  const exerciseSuggestions = useMemo(() => {
-    const counts: Record<string, number> = {};
-    logs.forEach(log => {
-      log.exercises.forEach(ex => {
-        // Only suggest matching type
-        if (exerciseType === 'CARDIO' && ex.type !== 'CARDIO') return;
-        if (exerciseType === 'STRENGTH' && ex.type === 'CARDIO') return;
-        counts[ex.name] = (counts[ex.name] || 0) + 1;
-      });
-    });
+  const applyLastTrainingData = (name: string) => {
+    setExName(name);
+    setShowSuggestions(false);
     
-    // Default suggestions if empty
-    if (Object.keys(counts).length === 0) {
-       if (exerciseType === 'CARDIO') return ['跑步機', '飛輪', '划船機', '橢圓機', '跳繩', '游泳', '爬樓梯'];
-       return ['深蹲', '硬舉', '臥推', '肩推', '引體向上', '划船'];
+    const allEx = [...logs].reverse().flatMap(l => l.exercises);
+    const lastMatch = allEx.find(e => e.name === name);
+    
+    if (lastMatch) {
+      if (lastMatch.type === 'STRENGTH') {
+        setExWeight(lastMatch.weight.toString());
+        setExReps(lastMatch.reps.toString());
+        setExSets(lastMatch.sets);
+        setExerciseType('STRENGTH');
+      } else {
+        setExDuration(lastMatch.durationMinutes?.toString() || '');
+        setExerciseType('CARDIO');
+      }
     }
+  };
 
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(entry => entry[0]);
-  }, [logs, exerciseType]);
+  const addExercise = () => {
+    if (!exName) return;
+    const w = parseFloat(exWeight) || 0;
+    const r = parseInt(exReps) || 0;
+    const d = parseInt(exDuration) || 0;
+    
+    const newEx: WorkoutExercise = {
+      id: Date.now().toString(),
+      type: exerciseType,
+      name: exName,
+      weight: exerciseType === 'STRENGTH' ? w : 0,
+      reps: exerciseType === 'STRENGTH' ? r : 0,
+      sets: exerciseType === 'STRENGTH' ? exSets : 1,
+      durationMinutes: exerciseType === 'CARDIO' ? d : 0,
+      caloriesBurned: Math.round((w * r * exSets * 0.04) + (exSets * 8))
+    };
+    setPendingExercises([...pendingExercises, newEx]);
+    setExName(''); setExWeight(''); setExReps(''); setExDuration('');
+  };
 
-  const duration = useMemo(() => {
+  const durationMinutes = useMemo(() => {
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
     let diff = (eh * 60 + em) - (sh * 60 + sm);
     return diff < 0 ? diff + 1440 : diff;
   }, [startTime, endTime]);
 
-  const daysInMonth = useMemo(() => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const days = new Date(year, month + 1, 0).getDate();
-    return { firstDay, days };
-  }, [currentMonth]);
+  const currentSessionBurn = pendingExercises.reduce((s, ex) => s + (ex.caloriesBurned || 0), 0);
 
   const toggleFocus = (f: string) => {
-    setSelectedFocus(prev => prev.includes(f) ? prev.filter(i => i !== f) : [...prev, f]);
+    setSelectedFocus(prev => prev.includes(f) ? prev.filter(item => item !== f) : [...prev, f]);
   };
 
   const handleAddCustomFocus = () => {
-    const val = customFocusInput.trim();
-    if (val && !focusPresets.includes(val) && !userCustomFocuses.includes(val)) {
-      setUserCustomFocuses([...userCustomFocuses, val]);
-      setSelectedFocus([...selectedFocus, val]);
-      setCustomFocusInput('');
+    if (customFocus.trim() && !selectedFocus.includes(customFocus.trim())) {
+      setSelectedFocus([...selectedFocus, customFocus.trim()]);
+      setCustomFocus('');
     }
   };
-
-  const removeCustomFocus = (f: string) => {
-    setUserCustomFocuses(userCustomFocuses.filter(i => i !== f));
-    setSelectedFocus(selectedFocus.filter(i => i !== f));
-  };
-
-  // 簡單的有氧熱量估算 (METs)
-  const calculateCardioCalories = (duration: number, intensity: string) => {
-     let mets = 3;
-     if (intensity === 'LOW') mets = 4; // 快走
-     if (intensity === 'MED') mets = 8; // 慢跑
-     if (intensity === 'HIGH') mets = 11; // 衝刺/HIIT
-     const factors = { 'LOW': 5, 'MED': 8, 'HIGH': 12 }; // kcal per min approx
-     return Math.round(factors[intensity as keyof typeof factors] * duration);
-  };
-
-  const addOrUpdateExercise = () => {
-    if (!exName) return;
-    
-    let calories = 0;
-    if (exerciseType === 'CARDIO') {
-       calories = calculateCardioCalories(parseInt(exDuration) || 0, exIntensity);
-    } else {
-       // Strength estimated very roughly: 4 kcal per min of active work.
-       // Assume 1 set takes 1.5 min
-       calories = exSets * 1.5 * 5; 
-    }
-
-    const newExData: WorkoutExercise = {
-      id: editingExId || Date.now().toString(),
-      type: exerciseType,
-      name: exName,
-      weight: parseFloat(exWeight) || 0,
-      reps: parseInt(exReps) || 0,
-      sets: exSets,
-      durationMinutes: parseInt(exDuration) || 0,
-      distance: parseFloat(exDistance) || 0,
-      caloriesBurned: calories
-    };
-    
-    if (editingExId) {
-      setPendingExercises(prev => prev.map(ex => ex.id === editingExId ? newExData : ex));
-      setEditingExId(null);
-    } else {
-      setPendingExercises([...pendingExercises, newExData]);
-    }
-    
-    // Reset Form
-    setExWeight(''); setExReps(''); setExSets(1);
-    setExDuration(''); setExDistance(''); setExIntensity('MED');
-  };
-
-  const handleEditHistory = (log: WorkoutLog) => {
-    setIsEditingHistory(log.id);
-    setStartTime(log.startTime);
-    setEndTime(log.endTime);
-    setPendingExercises(log.exercises);
-    setFeedback(log.feedback || '');
-    const focuses = (log.focus || '').split(', ').filter(f => f.trim() !== '');
-    setSelectedFocus(focuses);
-    const customs = focuses.filter(f => !focusPresets.includes(f));
-    setUserCustomFocuses(Array.from(new Set([...userCustomFocuses, ...customs])));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleEditExercise = (ex: WorkoutExercise) => {
-     setEditingExId(ex.id);
-     setExerciseType(ex.type || 'STRENGTH');
-     setExName(ex.name);
-     
-     if (ex.type === 'CARDIO') {
-        setExDuration(ex.durationMinutes?.toString() || '');
-        setExDistance(ex.distance?.toString() || '');
-        setExIntensity('MED'); 
-     } else {
-        setExWeight(ex.weight.toString());
-        setExReps(ex.reps.toString());
-        setExSets(ex.sets);
-     }
-     
-     document.getElementById('exercise-input-zone')?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleCommit = async () => {
-    if (pendingExercises.length === 0) {
-      alert("David教練: 至少需新增一個動作項目。");
-      return;
-    }
-    
-    const logFocus = selectedFocus.filter(f => f.trim() !== '').join(', ');
-    const totalBurn = pendingExercises.reduce((sum, ex) => sum + (ex.caloriesBurned || 0), 0);
-    
-    const newLog: WorkoutLog = {
-      id: isEditingHistory || Date.now().toString(),
-      date: selectedDate,
-      startTime, endTime,
-      focus: logFocus,
-      feedback: feedback, // 手動反饋保留
-      durationMinutes: duration,
-      exercises: pendingExercises,
-      totalCaloriesBurned: totalBurn
-    };
-
-    if (isEditingHistory && onUpdateLog) {
-      onUpdateLog(newLog);
-      setIsEditingHistory(null);
-    } else {
-      onAddLog(newLog);
-    }
-
-    // 移除 AI 反饋，改為即時確認
-    setFeedbackMsg("戰術日誌已封存。數據已整合至系統矩陣。");
-    setShowCoachFeedback(true);
-    
-    localStorage.removeItem(`matrix_draft_${profile.memberId}`);
-    setTimeout(() => setShowCoachFeedback(false), 3000);
-
-    setPendingExercises([]);
-    setFeedback('');
-    setSelectedFocus([]);
-    setExName('');
-    setExWeight('');
-    setExReps('');
-    setExSets(1);
-    setExDuration(''); setExDistance('');
-  };
-
-  const todayLogs = logs.filter(l => l.date === selectedDate);
 
   return (
-    <div className="animate-in fade-in duration-700 max-w-7xl mx-auto space-y-8 pb-40 px-2 md:px-0">
-      <div className="flex flex-col lg:flex-row bg-white border border-gray-100 shadow-2xl rounded-sm overflow-hidden">
-        {/* Left Side (Calendar) - Same as before */}
-        <div className="lg:w-80 p-6 border-r border-gray-100 bg-[#fcfcfc]">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-black">{currentMonth.getFullYear()}年 {currentMonth.getMonth()+1}月</h3>
-            <div className="flex gap-2">
-               <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth()-1))} className="p-1 hover:bg-gray-100"><ChevronLeft size={16}/></button>
-               <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1))} className="p-1 hover:bg-gray-100"><ChevronRight size={16}/></button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 text-center gap-y-2 mb-8">
-            {['日','一','二','三','四','五','六'].map(d => <span key={d} className="text-[10px] font-black text-gray-300 uppercase">{d}</span>)}
-            {Array.from({length: daysInMonth.firstDay}).map((_, i) => <div key={i}/>)}
-            {Array.from({length: daysInMonth.days}).map((_, i) => {
-              const d = i + 1;
-              const ds = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-              const isSelected = selectedDate === ds;
-              const hasLog = logs.some(l => l.date === ds);
-              return (
-                <button 
-                  key={d} onClick={() => { setSelectedDate(ds); setIsEditingHistory(null); }}
-                  className={`relative w-8 h-8 flex items-center justify-center text-xs font-black mx-auto transition-all ${isSelected ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black'}`}
-                >
-                  {d}
-                  {hasLog && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-lime-400 rounded-full"></div>}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="space-y-3">
-             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">今日航跡 ({todayLogs.length})</p>
-             {todayLogs.length === 0 ? (
-               <p className="text-[10px] text-gray-300 italic py-4 text-center">本日尚無紀錄</p>
-             ) : (
-               todayLogs.map(log => (
-                 <div key={log.id} className="bg-white border border-gray-50 p-4 shadow-sm group relative hover:border-black transition-all">
-                    <div className="flex justify-between items-start mb-1">
-                      <p className="text-[11px] font-black uppercase text-gray-900 truncate pr-4">{log.focus || '一般訓練'}</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleEditHistory(log)} className="text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all"><Edit2 size={12}/></button>
-                        <button onClick={() => onDeleteLog(log.id)} className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={12}/></button>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-end">
-                       <p className="text-[8px] font-mono text-gray-400 uppercase tracking-widest">{log.startTime}-{log.endTime}</p>
-                       <div className="text-right">
-                         <p className="text-[9px] font-black text-gray-300">{log.exercises.length} EX</p>
-                         {log.totalCaloriesBurned ? <p className="text-[8px] font-bold text-lime-600">-{log.totalCaloriesBurned} kcal</p> : null}
-                       </div>
-                    </div>
-                 </div>
-               ))
-             )}
-          </div>
+    <div className="max-w-6xl mx-auto space-y-8 pb-40 px-4 animate-in fade-in duration-500">
+      
+      {/* 頂部數據摘要 */}
+      <div className="flex flex-col md:flex-row items-center justify-between border-b-2 border-black pb-4 gap-4">
+        <div className="flex items-center gap-3">
+           <div className="w-12 h-12 bg-black text-[#bef264] flex items-center justify-center rounded shadow-md"><Zap size={24}/></div>
+           <div>
+              <h2 className="text-2xl font-black tracking-tighter uppercase leading-none text-black">訓練戰報登錄</h2>
+              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-[0.2em] mt-1">LOG_SYSTEM_V4.8_STABLE</p>
+           </div>
         </div>
+        <div className="flex gap-3 w-full md:w-auto">
+           <div className="flex-1 bg-white px-5 py-3 border border-gray-100 rounded-2xl text-center min-w-[120px] shadow-sm">
+              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">時長 DURATION</p>
+              <p className="text-2xl font-black font-mono leading-none text-black">{durationMinutes} <span className="text-[10px] text-gray-300">MIN</span></p>
+           </div>
+           <div className="flex-1 bg-black px-5 py-3 rounded-2xl text-center shadow-lg min-w-[120px] border-2 border-[#bef264]/20">
+              <p className="text-[8px] font-black text-[#bef264] uppercase tracking-widest mb-1">預估熱量 KCAL</p>
+              <p className="text-2xl font-black font-mono leading-none text-white">{currentSessionBurn}</p>
+           </div>
+        </div>
+      </div>
 
-        {/* Right Side */}
-        <div className="flex-1 p-6 md:p-10 space-y-8 relative">
-          {isEditingHistory && (
-            <div className="absolute top-4 right-10 flex items-center gap-3">
-               <div className="bg-blue-600 text-white px-4 py-1.5 text-[10px] font-black uppercase tracking-widest shadow-lg animate-pulse">修正歷史紀錄中</div>
-               <button onClick={() => { setIsEditingHistory(null); setPendingExercises([]); setExName(''); }} className="text-gray-400 hover:text-black"><X size={18}/></button>
-            </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 border-b border-gray-100 pb-6">
-            <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 flex items-center justify-center shadow-lg transition-colors ${isEditingHistory ? 'bg-blue-600 text-white' : 'bg-black text-[#bef264]'}`}><Zap size={20}/></div>
-              <div>
-                <h2 className="text-xl md:text-2xl font-black tracking-tighter uppercase leading-none">
-                  {isEditingHistory ? 'MOD_LOG_SYSTEM' : '快速登錄系統'}
-                </h2>
-                <p className="text-[9px] text-gray-400 font-bold uppercase mt-1 tracking-widest">Training Draft Auto-Saved</p>
-              </div>
-            </div>
-            <div className="bg-gray-50 px-6 py-3 border border-gray-100 shrink-0">
-              <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest text-center">DURATION</p>
-              <p className="text-xl font-black font-mono leading-none text-center">{duration}<span className="text-[10px] ml-1 uppercase">min</span></p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
-            <div className="space-y-8">
-              {/* Input Fields - Same as before */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1 min-w-0">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1 block">開始時間 START</label>
-                  <div className="relative">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        {/* 左側：核心輸入 */}
+        <div className="lg:col-span-7 space-y-8">
+           
+           {/* 時間輸入：修正跑版問題，確保文字與圖標在一行 */}
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-gray-100 shadow-sm group">
+                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">開始時間 START</p>
+                 <div className="bg-white px-5 py-4 rounded-2xl flex items-center justify-between border border-gray-100 group-focus-within:border-black transition-all">
                     <input 
                       type="time" 
                       value={startTime} 
                       onChange={e => setStartTime(e.target.value)} 
-                      className="w-full bg-gray-50 border border-transparent px-2 py-4 text-lg font-black font-mono outline-none focus:bg-white focus:border-black transition-all text-center appearance-none" 
-                      style={{ WebkitAppearance: 'none' }}
+                      className="flex-1 text-3xl font-black font-mono bg-transparent text-black outline-none min-w-0" 
                     />
-                  </div>
-                </div>
-                <div className="space-y-1 min-w-0">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1 block">結束時間 END</label>
-                  <div className="relative">
+                    <Clock className="text-black shrink-0 ml-3" size={24} />
+                 </div>
+              </div>
+              <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-gray-100 shadow-sm group">
+                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">結束時間 END</p>
+                 <div className="bg-white px-5 py-4 rounded-2xl flex items-center justify-between border border-gray-100 group-focus-within:border-black transition-all">
                     <input 
                       type="time" 
                       value={endTime} 
                       onChange={e => setEndTime(e.target.value)} 
-                      className="w-full bg-gray-50 border border-transparent px-2 py-4 text-lg font-black font-mono outline-none focus:bg-white focus:border-black transition-all text-center appearance-none" 
-                      style={{ WebkitAppearance: 'none' }}
+                      className="flex-1 text-3xl font-black font-mono bg-transparent text-black outline-none min-w-0" 
                     />
-                  </div>
-                </div>
+                    <Clock className="text-black shrink-0 ml-3" size={24} />
+                 </div>
               </div>
+           </div>
 
-              {/* Focus Section */}
-              <div className="space-y-4">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">訓練焦點 TARGET (可複選)</label>
-                <div className="flex flex-wrap gap-2">
-                   {focusPresets.map(f => (
-                     <button key={f} onClick={() => toggleFocus(f)} className={`px-3 py-2 text-[10px] font-black transition-all border ${selectedFocus.includes(f) ? 'bg-black text-[#bef264] border-black shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-black hover:text-black'}`}>
-                        {f}
-                     </button>
-                   ))}
-                   
-                   {userCustomFocuses.map(f => (
-                     <div key={f} className="relative group">
-                        <button onClick={() => toggleFocus(f)} className={`px-3 py-2 text-[10px] font-black transition-all border ${selectedFocus.includes(f) ? 'bg-[#bef264] text-black border-black' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
-                          {f}
-                        </button>
-                        <button onClick={() => removeCustomFocus(f)} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-all">
-                           <X size={8} />
-                        </button>
-                     </div>
-                   ))}
-
-                   <div className="flex border border-dashed border-gray-200 focus-within:border-black transition-all">
-                      <input 
-                        type="text"
-                        value={customFocusInput}
-                        onChange={e => setCustomFocusInput(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCustomFocus())}
-                        placeholder="自定義..."
-                        className="w-20 px-2 py-2 text-[10px] font-black outline-none placeholder:text-gray-300"
-                      />
-                      <button onClick={handleAddCustomFocus} className="px-2 text-gray-400 hover:text-black transition-colors">
-                         <Plus size={12} />
-                      </button>
-                   </div>
-                </div>
-              </div>
-
-              {/* Core Exercise Input */}
-              <div id="exercise-input-zone" className="bg-gray-50 p-6 space-y-6 rounded-sm border border-gray-100 shadow-inner relative">
-                 <div className="flex justify-between items-center mb-1">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                       {editingExId ? <Edit2 size={12} className="text-blue-500" /> : <Plus size={12} className="text-lime-500" />}
-                       {editingExId ? '動作數據修正' : '動作即時速記'}
-                    </p>
-                    {pendingExercises.length > 0 && !editingExId && (
-                      <button onClick={() => { 
-                        const last = pendingExercises[pendingExercises.length - 1]; 
-                        setExerciseType(last.type || 'STRENGTH');
-                        setExName(last.name); 
-                        if(last.type === 'CARDIO') {
-                            setExDuration(last.durationMinutes?.toString() || '');
-                            setExDistance(last.distance?.toString() || '');
-                        } else {
-                            setExWeight(last.weight.toString()); setExReps(last.reps.toString()); setExSets(last.sets);
-                        }
-                      }} className="text-[9px] font-black text-gray-400 uppercase hover:text-black flex items-center gap-1">
-                        <RotateCcw size={10} /> 複製上一組
-                      </button>
-                    )}
-                 </div>
-
-                 {/* Type Toggle & Inputs (Same as before) */}
-                 <div className="flex bg-white border border-gray-200 p-1 rounded-sm">
-                    <button onClick={() => setExerciseType('STRENGTH')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'STRENGTH' ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}><Dumbbell size={14} /> 重量訓練 STRENGTH</button>
-                    <button onClick={() => setExerciseType('CARDIO')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase transition-all ${exerciseType === 'CARDIO' ? 'bg-black text-[#bef264] shadow-md' : 'text-gray-400'}`}><Activity size={14} /> 有氧代謝 CARDIO</button>
-                 </div>
-
-                 <div className="flex flex-wrap gap-2 pb-1 overflow-x-auto no-scrollbar">
-                    {exerciseSuggestions.map(tag => (
-                      <button key={tag} onClick={() => setExName(tag)} className={`px-2 py-1 text-[9px] font-bold border transition-all whitespace-nowrap ${exName === tag ? 'bg-black text-white border-black' : 'bg-white text-gray-400 border-gray-100 hover:border-gray-300'}`}>#{tag}</button>
-                    ))}
-                 </div>
-
-                 <div className="space-y-6">
+           {/* 訓練焦點：加入自定義欄位 */}
+           <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">訓練焦點 TARGET (可複選)</p>
+              <div className="flex flex-wrap gap-2">
+                 {focusPresets.map(f => (
+                   <button 
+                     key={f} 
+                     onClick={() => toggleFocus(f)} 
+                     className={`px-5 py-2.5 text-xs font-black rounded-xl border transition-all ${selectedFocus.includes(f) ? 'bg-black text-[#bef264] border-black shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-black hover:text-black'}`}
+                   >
+                     {f}
+                   </button>
+                 ))}
+                 {selectedFocus.filter(f => !focusPresets.includes(f)).map(f => (
+                   <button 
+                     key={f} 
+                     onClick={() => toggleFocus(f)} 
+                     className="px-5 py-2.5 text-xs font-black rounded-xl border bg-black text-[#bef264] border-black shadow-md"
+                   >
+                     {f}
+                   </button>
+                 ))}
+                 {/* 自定義輸入框 */}
+                 <div className="flex items-center bg-gray-50 border border-dashed border-gray-300 rounded-xl px-3 group focus-within:border-black transition-all">
                     <input 
-                      placeholder={exerciseType === 'STRENGTH' ? "輸入動作名稱 (如：槓鈴臥推)" : "輸入項目 (如：跑步機 10K)"}
-                      value={exName} 
-                      onChange={e => setExName(e.target.value)} 
-                      className="w-full bg-white px-5 py-5 text-lg font-black shadow-sm outline-none border border-transparent focus:border-black" 
+                      placeholder="自定義..." 
+                      value={customFocus}
+                      onChange={e => setCustomFocus(e.target.value)}
+                      onKeyPress={e => e.key === 'Enter' && handleAddCustomFocus()}
+                      className="bg-transparent text-xs font-black py-2.5 outline-none w-20 group-focus-within:w-28 transition-all text-black placeholder:text-gray-300"
                     />
-                    
-                    {exerciseType === 'STRENGTH' ? (
-                       <>
-                         <div className="grid grid-cols-2 gap-4">
-                           <div className="space-y-1">
-                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">重量 WEIGHT (KG)</label>
-                             <input type="number" step="0.5" placeholder="0" value={exWeight} onChange={e => setExWeight(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
-                           </div>
-                           <div className="space-y-1">
-                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">次數 REPS</label>
-                             <input type="number" placeholder="0" value={exReps} onChange={e => setExReps(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
-                           </div>
-                         </div>
-                         <div className="space-y-3">
-                           <div className="flex justify-between items-center px-1">
-                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest">組數 SETS (滑動選擇)</label>
-                             <span className="text-xl font-black font-mono text-black">{exSets} <span className="text-[10px] uppercase text-gray-400">組</span></span>
-                           </div>
-                           <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
-                              {[1,2,3,4,5,6,7,8,9,10].map(s => (
-                                <button key={s} onClick={() => setExSets(s)} className={`flex-shrink-0 w-10 h-10 text-xs font-black transition-all border ${exSets === s ? 'bg-black text-[#bef264] border-black scale-105' : 'bg-white text-gray-300 border-gray-100 hover:border-gray-200'}`}>{s}</button>
-                              ))}
-                           </div>
-                         </div>
-                       </>
-                    ) : (
-                       <>
-                          <div className="grid grid-cols-2 gap-4">
-                             <div className="space-y-1">
-                               <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">時間 DURATION (MIN)</label>
-                               <input type="number" placeholder="0" value={exDuration} onChange={e => setExDuration(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
-                             </div>
-                             <div className="space-y-1">
-                               <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block">距離 DISTANCE (KM)</label>
-                               <input type="number" step="0.1" placeholder="0" value={exDistance} onChange={e => setExDistance(e.target.value)} className="w-full bg-white p-4 text-center font-mono font-black border border-transparent focus:border-black outline-none shadow-sm text-2xl" />
-                             </div>
-                          </div>
-                          <div className="space-y-1">
-                             <label className="text-[8px] font-black text-gray-300 uppercase tracking-widest block mb-2">強度 INTENSITY</label>
-                             <div className="flex gap-2">
-                                {(['LOW', 'MED', 'HIGH'] as const).map(level => (
-                                   <button key={level} onClick={() => setExIntensity(level)} className={`flex-1 py-3 text-[10px] font-black border uppercase transition-all ${exIntensity === level ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-200'}`}>{level}</button>
-                                ))}
-                             </div>
-                          </div>
-                          <div className="flex items-center justify-center gap-2 p-3 bg-gray-100/50 text-gray-400">
-                             <Flame size={12} className="text-orange-400" />
-                             <span className="text-[10px] font-black uppercase">預估消耗: ~{Math.round((parseInt(exDuration)||0) * (exIntensity==='LOW'?5:exIntensity==='MED'?8:12))} kcal</span>
-                          </div>
-                       </>
-                    )}
+                    <button onClick={handleAddCustomFocus} className="text-gray-300 group-focus-within:text-black transition-colors"><Plus size={14}/></button>
+                 </div>
+              </div>
+           </div>
 
-                    <div className="flex gap-2 pt-2">
-                       {editingExId && <button onClick={() => { setEditingExId(null); setExName(''); setExWeight(''); setExReps(''); setExSets(1); setExDuration(''); setExDistance(''); }} className="flex-1 bg-gray-100 text-gray-400 py-4 text-[10px] font-black uppercase tracking-widest">取消</button>}
-                       <button onClick={addOrUpdateExercise} disabled={!exName} className={`flex-[2] py-5 text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${editingExId ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-black text-[#bef264] hover:bg-lime-400 hover:text-black shadow-lg'} disabled:opacity-20`}>
-                          {editingExId ? <><Check size={16}/> 更新數據</> : <><Plus size={16}/> 暫存此組動作</>}
-                       </button>
+           {/* 核心動作面板 */}
+           <div className="bg-white p-6 space-y-8 border border-gray-100 rounded-[2.5rem] shadow-lg relative overflow-hidden">
+              <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-50">
+                 <button onClick={() => setExerciseType('STRENGTH')} className={`flex-1 flex items-center justify-center gap-2 py-4 text-[11px] font-black uppercase transition-all rounded-xl ${exerciseType === 'STRENGTH' ? 'bg-black text-white shadow-lg scale-[1.02]' : 'text-gray-300 hover:text-black'}`}><Dumbbell size={18}/> 重量訓練 STRENGTH</button>
+                 <button onClick={() => setExerciseType('CARDIO')} className={`flex-1 flex items-center justify-center gap-2 py-4 text-[11px] font-black uppercase transition-all rounded-xl ${exerciseType === 'CARDIO' ? 'bg-black text-white shadow-lg scale-[1.02]' : 'text-gray-300 hover:text-black'}`}><Activity size={18}/> 有氧代謝 CARDIO</button>
+              </div>
+
+              {/* 快速 Hashtags */}
+              <div className="flex flex-wrap gap-2 px-2">
+                 {exerciseLibrary[exerciseType].slice(0, 8).map(name => (
+                    <button key={name} onClick={() => applyLastTrainingData(name)} className="px-3 py-2 bg-gray-50 text-[10px] font-black text-gray-400 border border-gray-100 rounded-lg hover:bg-black hover:text-[#bef264] hover:border-black transition-all">#{name}</button>
+                 ))}
+              </div>
+
+              {/* 動作名稱：強化自動帶入 */}
+              <div className="space-y-4 relative">
+                 <div className="bg-gray-50/50 p-12 border-b-4 border-black flex items-center justify-center min-h-[160px] rounded-t-3xl relative group transition-all focus-within:bg-white">
+                    <input 
+                       placeholder="輸入動作名稱 (如：槓鈴臥推)" 
+                       value={exName} 
+                       onChange={e => { setExName(e.target.value); setShowSuggestions(true); }}
+                       onFocus={() => setShowSuggestions(true)}
+                       onBlur={() => setTimeout(() => setShowSuggestions(false), 200) }
+                       className="w-full text-center text-3xl font-black outline-none bg-transparent placeholder:text-gray-200 text-black tracking-tighter" 
+                    />
+                 </div>
+                 
+                 {showSuggestions && suggestions.length > 0 && (
+                    <div className="absolute top-[105%] left-0 right-0 z-[60] bg-white border-2 border-black rounded-2xl shadow-2xl overflow-hidden">
+                       {suggestions.map(s => (
+                          <button key={s} onClick={() => applyLastTrainingData(s)} className="w-full text-left px-6 py-5 text-sm font-black hover:bg-black hover:text-[#bef264] transition-all border-b border-gray-50 last:border-0 flex justify-between items-center group">
+                             <span>{s}</span>
+                             <span className="text-[9px] text-gray-300 font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Auto-Load Previous</span>
+                          </button>
+                       ))}
+                    </div>
+                 )}
+              </div>
+
+              {/* 數據區 */}
+              <div className="grid grid-cols-2 gap-6">
+                 <div className="space-y-3 text-center">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">重量 WEIGHT (KG)</p>
+                    <div className="bg-gray-50/50 h-36 flex items-center justify-center rounded-[2.5rem] border border-gray-100 focus-within:border-black focus-within:bg-white transition-all group shadow-inner">
+                       <input type="number" step="0.5" value={exWeight} onChange={e => setExWeight(e.target.value)} className="w-full text-center font-mono font-black text-6xl outline-none bg-transparent text-black" />
+                    </div>
+                 </div>
+                 <div className="space-y-3 text-center">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">次數 REPS</p>
+                    <div className="bg-gray-50/50 h-36 flex items-center justify-center rounded-[2.5rem] border border-gray-100 focus-within:border-black focus-within:bg-white transition-all group shadow-inner">
+                       <input type="number" value={exReps} onChange={e => setExReps(e.target.value)} className="w-full text-center font-mono font-black text-6xl outline-none bg-transparent text-black" />
                     </div>
                  </div>
               </div>
-            </div>
 
-            <div className="flex flex-col h-full space-y-6">
-              {/* Buffer List (Same as before) */}
-              <div className="flex-1 min-h-[400px] border border-gray-100 bg-[#fcfcfc] rounded-sm flex flex-col shadow-inner">
-                 <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.3em]">SESSION_BUFFER</p>
-                    <span className="text-[10px] font-mono text-black font-black bg-lime-400 px-2 py-0.5">{pendingExercises.length} ITEMS</span>
+              {/* 組數選擇器 */}
+              <div className="space-y-5">
+                 <div className="flex justify-between items-end px-4">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">組數 SETS_COUNT</p>
+                    <p className="text-5xl font-black font-mono leading-none text-black">{exSets} <span className="text-sm font-black text-gray-300 ml-1">組</span></p>
                  </div>
-                 <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-                    {pendingExercises.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center opacity-20 grayscale py-20">
-                         <History size={40} className="mb-4" />
-                         <p className="text-[10px] font-black uppercase tracking-widest">等待紀錄輸入...</p>
-                      </div>
-                    ) : (
-                      [...pendingExercises].reverse().map(ex => (
-                        <div key={ex.id} className={`group flex items-center justify-between bg-white p-4 border transition-all ${editingExId === ex.id ? 'border-blue-500 ring-2 ring-blue-100' : 'border-gray-100 hover:border-gray-300'}`}>
-                           <div className="flex-1 cursor-pointer" onClick={() => handleEditExercise(ex)}>
-                              <div className="flex items-center gap-2 mb-1">
-                                 {ex.type === 'CARDIO' && <span className="text-[8px] font-black bg-orange-100 text-orange-500 px-1 rounded-sm">CARDIO</span>}
-                                 <p className="text-xs font-black uppercase text-gray-800">{ex.name}</p>
-                              </div>
-                              <div className="flex items-center gap-3 mt-1">
-                                {ex.type === 'CARDIO' ? (
-                                   <>
-                                     <span className="text-xl font-mono font-black text-black">{ex.durationMinutes}<span className="text-[9px] text-gray-400 ml-1 uppercase">min</span></span>
-                                     <span className="text-xs text-gray-300">/</span>
-                                     <span className="text-xl font-mono font-black text-lime-600">{ex.distance || 0}<span className="text-[9px] text-gray-400 ml-1 uppercase">km</span></span>
-                                   </>
-                                ) : (
-                                   <>
-                                     <span className="text-xl font-mono font-black text-black">{ex.weight}<span className="text-[9px] text-gray-400 ml-1 uppercase">kg</span></span>
-                                     <span className="text-xs text-gray-300">/</span>
-                                     <span className="text-xl font-mono font-black text-black">{ex.reps}<span className="text-[9px] text-gray-400 ml-1 uppercase">次</span></span>
-                                     <span className="text-xs text-gray-300">/</span>
-                                     <span className="text-xl font-mono font-black text-lime-600">{ex.sets}<span className="text-[9px] text-gray-400 ml-1 uppercase">組</span></span>
-                                   </>
-                                )}
-                              </div>
-                           </div>
-                           <div className="flex items-center gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => setPendingExercises(prev => prev.filter(p => p.id !== ex.id))} className="p-2 text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
-                           </div>
-                        </div>
-                      ))
-                    )}
+                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 px-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map(n => (
+                      <button key={n} onClick={() => setExSets(n)} className={`w-16 h-16 shrink-0 flex items-center justify-center font-black text-xl transition-all border-2 rounded-2xl ${exSets === n ? 'bg-black text-[#bef264] border-black scale-110 shadow-xl' : 'bg-white text-gray-300 border-gray-50 hover:border-black hover:text-black'}`}>
+                         {n}
+                      </button>
+                    ))}
                  </div>
               </div>
 
-              <div className="space-y-4">
-                <textarea 
-                  value={feedback} onChange={e => setFeedback(e.target.value)}
-                  placeholder="訓練筆記 (可選): 今天的肌肉充血感與神經疲勞程度如何？"
-                  className="w-full bg-gray-50 p-5 text-sm font-bold outline-none focus:bg-white border border-transparent focus:border-black resize-none h-32 transition-all shadow-inner"
-                />
-                
-                <button 
-                  onClick={handleCommit} 
-                  disabled={pendingExercises.length === 0}
-                  className={`w-full py-6 font-black text-xs tracking-[0.5em] uppercase transition-all shadow-2xl active:scale-95 disabled:opacity-50 ${isEditingHistory ? 'bg-blue-600 text-white' : 'bg-black text-white hover:bg-[#bef264] hover:text-black'}`}
-                >
-                   {isEditingHistory ? '確認修正歷史紀錄 UPDATE' : '完成訓練數據封存 COMMIT'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showCoachFeedback && (
-        <div 
-          onClick={() => setShowCoachFeedback(false)} 
-          className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/40 backdrop-blur-md cursor-pointer"
-        >
-           <div 
-             onClick={(e) => e.stopPropagation()} 
-             className="bg-black text-[#bef264] p-8 border-4 border-[#bef264] shadow-[0_0_100px_rgba(190,242,100,0.5)] animate-in zoom-in duration-300 max-w-lg relative"
-           >
+              {/* 存入緩衝按鈕 */}
               <button 
-                onClick={() => setShowCoachFeedback(false)} 
-                className="absolute top-2 right-2 p-2 text-[#bef264]/50 hover:text-[#bef264]"
+                onClick={addExercise} 
+                disabled={!exName} 
+                className={`w-full py-10 font-black text-sm tracking-[0.5em] uppercase transition-all flex flex-col items-center justify-center gap-2 rounded-[2.5rem] border-4 ${exName ? 'bg-black text-[#bef264] border-black shadow-2xl active:scale-[0.98]' : 'bg-gray-50 text-gray-200 border-gray-100'}`}
               >
-                <X size={20} />
+                 <span className="leading-none text-base">存 入 緩 衝</span>
+                 <Plus size={28} className="mt-1"/>
               </button>
-              <div className="flex items-center gap-4 mb-4">
-                 <Zap size={28} className="fill-current animate-pulse" />
-                 <p className="text-[12px] font-black uppercase tracking-[0.4em]">System Notification</p>
-              </div>
-              <p className="text-xl font-bold italic tracking-tight leading-snug text-white whitespace-pre-wrap">{feedbackMsg}</p>
-              <div className="mt-8 pt-4 border-t border-[#bef264]/20 text-[9px] font-mono text-[#bef264]/60 text-right uppercase">Uplink Stable - Matrix Verified</div>
            </div>
         </div>
-      )}
+
+        {/* 右側：作業佇列與情報反饋 (Queue Top, Report Bottom) */}
+        <div className="lg:col-span-5 flex flex-col space-y-6">
+           
+           {/* 1. 紀錄佇列 (置頂) */}
+           <div className="bg-white border border-gray-100 min-h-[350px] flex flex-col rounded-[2.5rem] relative shadow-sm overflow-hidden">
+              <div className="p-6 bg-gray-50/50 border-b border-gray-100 flex justify-between items-center">
+                 <div className="flex items-center gap-3">
+                    <HistoryIcon size={18} className="text-black" />
+                    <p className="text-[10px] font-black text-black uppercase tracking-widest">作業佇列 QUEUE</p>
+                 </div>
+                 <span className="text-[10px] font-black bg-black text-[#bef264] px-5 py-2 rounded-full shadow-md">{pendingExercises.length} ITEMS</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                 {pendingExercises.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-10 py-16">
+                       <HistoryIcon size={72} className="mb-4 text-black" />
+                       <p className="text-xs font-black uppercase tracking-[0.4em] text-black">Awaiting Input</p>
+                    </div>
+                 ) : (
+                    [...pendingExercises].reverse().map(ex => (
+                       <div key={ex.id} className="bg-white p-6 border-2 border-gray-100 hover:border-black flex items-center justify-between shadow-sm transition-all rounded-3xl group/item">
+                          <div className="space-y-1">
+                             <p className="text-base font-black uppercase text-black">{ex.name}</p>
+                             <p className="text-xs font-mono font-bold text-gray-500 flex items-center gap-2">
+                                <span className="bg-gray-100 px-2 py-0.5 rounded text-black font-black">{ex.weight}KG</span> 
+                                <span className="opacity-20 text-black">|</span> 
+                                <span className="bg-gray-100 px-2 py-0.5 rounded text-black">{ex.reps}R</span> 
+                                <span className="opacity-20 text-black">|</span> 
+                                <span className="bg-black text-[#bef264] px-2 py-0.5 rounded font-black">{ex.sets}S</span>
+                             </p>
+                          </div>
+                          <button onClick={() => setPendingExercises(prev => prev.filter(p => p.id !== ex.id))} className="text-gray-200 hover:text-red-500 transition-all p-3 hover:bg-red-50 rounded-full"><Trash2 size={24}/></button>
+                       </div>
+                    ))
+                 )}
+              </div>
+           </div>
+
+           {/* 2. 訓練即時速記 (置底) */}
+           <div className="bg-gray-50 border border-gray-100 rounded-[2.5rem] overflow-hidden flex flex-col group focus-within:border-black focus-within:bg-white transition-all shadow-sm">
+              <div className="flex items-center gap-3 px-8 py-6 border-b border-gray-100 bg-white/50">
+                 <Edit3 size={18} className="text-black" />
+                 <span className="text-[10px] font-black text-black uppercase tracking-widest">情報反饋 INTEL_REPORT</span>
+              </div>
+              <div className="p-6">
+                 <textarea 
+                    value={feedback} 
+                    onChange={e => setFeedback(e.target.value)} 
+                    placeholder="輸入肌肉充血感、體感疲勞度、訓練異常回饋..." 
+                    className="w-full bg-white border border-gray-100 p-8 text-base font-bold outline-none min-h-[220px] resize-none placeholder:text-gray-200 rounded-[2rem] transition-all focus:border-black focus:shadow-inner leading-relaxed" 
+                 />
+              </div>
+           </div>
+
+           {/* 3. 戰略封存按鈕 */}
+           <button 
+             onClick={() => { 
+               onAddLog({ 
+                 id: Date.now().toString(), 
+                 date: selectedDate, 
+                 startTime, 
+                 endTime, 
+                 focus: selectedFocus.join(', '), 
+                 exercises: pendingExercises, 
+                 durationMinutes: durationMinutes, 
+                 totalCaloriesBurned: currentSessionBurn, 
+                 feedback 
+               }); 
+               setPendingExercises([]); 
+               setFeedback(''); 
+               setSelectedFocus([]); 
+             }} 
+             disabled={pendingExercises.length === 0} 
+             className={`w-full py-12 font-black text-2xl tracking-[0.8em] uppercase transition-all rounded-[3rem] border-4 ${pendingExercises.length > 0 ? 'bg-[#bef264] text-black border-[#bef264] shadow-[0_30px_90px_rgba(190,242,100,0.5)] cursor-pointer active:scale-95' : 'bg-gray-100 text-gray-300 border-gray-100 opacity-50 cursor-not-allowed'}`}
+           >
+              戰 略 封 存 COMMIT
+           </button>
+        </div>
+      </div>
     </div>
   );
 };
