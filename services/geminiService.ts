@@ -5,14 +5,17 @@ import { UserProfile, UserMetrics, GoalMetadata, WorkoutLog, PhysiqueRecord, Die
 const MODEL_STD_TEXT = 'gemini-3-flash-preview'; 
 const MODEL_PREMIUM = 'gemini-3-pro-preview'; 
 
+// Use process.env.API_KEY for the Gemini API key as per coding guidelines
 const getAIInstance = () => {
+// 在 Vite 中，必須使用 import.meta.env 並指定 apiKey 屬性
   const apiKey = import.meta.env.VITE_WORKOUT_GEMINI_API;
   
   if (!apiKey) {
-    console.error("Critical Error: VITE_WORKOUT_GEMINI_API not found.");
-    throw new Error("系統配置錯誤：缺少 AI API 金鑰");
+    console.error("David 教練警告：偵測不到通訊密鑰 (API Key)，請檢查環境變數。");
   }
-  return new GoogleGenAI({ apiKey });
+  
+  return new GoogleGenAI(apiKey);
+};
 };
 
 export const getLocalDavidGreeting = (profile: UserProfile): string => {
