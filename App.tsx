@@ -153,43 +153,35 @@ const App: React.FC = () => {
     <div className="flex min-h-screen bg-white">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} profile={profile} />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
-        {/* 頂部精緻狀態列：修正比例 */}
-        <div className="bg-black text-[#bef264] px-4 py-2.5 flex items-center gap-3 z-20 sticky top-0 shrink-0 border-b border-white/10 shadow-lg">
-           {/* AI 狀態燈 */}
-           <div className="flex items-center gap-1.5 shrink-0">
-              <Zap size={12} className="text-[#bef264] animate-pulse" />
-              <div className="w-[1px] h-3 bg-white/20"></div>
+        {/* 頂部狀態列：移除標籤，全寬顯示教練訊息 */}
+        <div className="bg-black text-[#bef264] px-4 py-3 flex items-center justify-between z-20 sticky top-0 shrink-0 border-b border-white/10 shadow-xl">
+           <div className="flex items-center gap-3 flex-1 min-w-0">
+              <Zap size={14} className="text-[#bef264] animate-pulse drop-shadow-[0_0_8px_#bef264] shrink-0" />
+              <p className="text-[11px] md:text-sm font-black font-mono text-white/95 truncate tracking-tight">
+                 {davidGreeting || 'David 正在加載戰略模型...'}
+              </p>
            </div>
            
-           {/* 指令文字：騰出空間 */}
-           <div className="flex-1 min-w-0 pr-6">
-             <p className="text-[10px] md:text-xs font-bold font-mono truncate text-white/90">
-                <span className="text-[#bef264]/70 mr-1.5">[SYS_SYNC]</span>
-                {davidGreeting || '正在校準核心...'}
-             </p>
-           </div>
-           
-           {/* 資料庫與同步狀態燈 */}
-           <div className="flex items-center gap-2 shrink-0">
+           <div className="flex items-center gap-3 ml-4 shrink-0">
               {!syncEnabled ? (
-                <ShieldOff size={12} className="text-gray-600" />
+                <ShieldOff size={14} className="text-gray-600" />
               ) : syncError ? (
-                <AlertTriangle size={12} className="text-red-500 animate-pulse" />
+                <AlertTriangle size={14} className="text-red-500 animate-pulse" />
               ) : isSyncing ? (
-                <Loader2 size={12} className="text-[#bef264] animate-spin" />
+                <Loader2 size={14} className="text-[#bef264] animate-spin" />
               ) : dbConnected ? (
-                <Cloud size={12} className="text-[#bef264] drop-shadow-[0_0_5px_rgba(190,242,100,0.5)]" />
+                <Cloud size={14} className="text-[#bef264] drop-shadow-[0_0_8px_rgba(190,242,100,0.6)]" />
               ) : (
-                <CloudOff size={12} className="text-gray-600" />
+                <CloudOff size={14} className="text-gray-600" />
               )}
            </div>
         </div>
 
-        <div className="flex-1 px-4 md:px-8 py-5 md:py-6 pb-32">
+        <div className="flex-1 px-4 md:px-8 py-6 pb-32">
           {!isDataLoaded && (
-            <div className="fixed inset-0 z-50 bg-white/90 flex flex-col items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-black mb-3" />
-              <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">LOADING_MATRIX_DATA</p>
+            <div className="fixed inset-0 z-50 bg-white/95 flex flex-col items-center justify-center">
+              <Loader2 className="w-10 h-10 animate-spin text-black mb-4" />
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">CONNECTING_TO_DAVID_ENGINE</p>
             </div>
           )}
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
