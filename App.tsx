@@ -12,6 +12,7 @@ import AdminPanel from './components/AdminPanel.tsx';
 import RewardVault from './components/RewardVault.tsx'; 
 import NutritionDeck from './components/NutritionDeck.tsx'; 
 import DailyRewardModal from './components/DailyRewardModal.tsx';
+import Onboarding from './components/Onboarding.tsx';
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog, WeeklyReportData } from './types.ts';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService.ts';
 import { getLocalDavidGreeting, getDailyBriefing } from './services/geminiService.ts'; 
@@ -40,6 +41,9 @@ const App: React.FC = () => {
   const [dailyBriefing, setDailyBriefing] = useState<string | null>(null);
   const [isLoadingBriefing, setIsLoadingBriefing] = useState(false);
 
+  // Onboarding State
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
   const DEFAULT_PROFILE: UserProfile = {
     name: 'User', age: 25, height: 175, gender: 'M', goal: FitnessGoal.HYPERTROPHY,
     equipment: [], customEquipmentPool: [], customGoalText: '',
@@ -47,7 +51,7 @@ const App: React.FC = () => {
     memberId: '', password: '',
     collectedRewardIds: [],
     unlockedAchievementIds: [],
-    hasCompletedOnboarding: true,
+    hasCompletedOnboarding: false,
     role: 'user',
     lastDailyFeedbackDate: '',
     lastPhysiqueAnalysisDate: '',
@@ -113,8 +117,13 @@ const App: React.FC = () => {
            setIsLoadingBriefing(false);
         });
       }
+
+      // Check Onboarding status
+      if (!profile.hasCompletedOnboarding) {
+        setShowOnboarding(true);
+      }
     }
-  }, [isDataLoaded, isAuthenticated, profile.lastLoginDate, profile.memberId]);
+  }, [isDataLoaded, isAuthenticated, profile.lastLoginDate, profile.memberId, profile.hasCompletedOnboarding]);
 
   useEffect(() => {
     if (!isDataLoaded || !isAuthenticated || !currentMemberId) return;
@@ -169,9 +178,10 @@ const App: React.FC = () => {
     window.location.reload();
   };
 
-  const handleClaimReward = () => {
+  const handleClaimReward = async () => {
+    if (!currentMemberId) return;
     const today = getTaiwanDate();
-    const rewardId = (profile.loginStreak || 1) - 1; // 0-based index for array
+    const rewardId = (profile.loginStreak || 1) - 1; 
     const newStreak = (profile.loginStreak || 0) + 1;
     
     // 更新 Profile: 標記今日已領取 (更新日期)，增加 streak，加入獎勵 ID
@@ -184,10 +194,18 @@ const App: React.FC = () => {
     
     setProfile(updatedProfile);
     setShowRewardModal(false);
-    // 觸發同步會在 useEffect 中自動執行
+    
+    // 強制立即同步，確保獎勵領取紀錄寫入
+    setIsSyncing(true);
+    try {
+      await syncToCloud('profiles', updatedProfile, currentMemberId);
+    } catch(e) {
+      console.error("Reward sync failed", e);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  // Upsert Log: 如果該日期已存在，則更新；否則新增
   const handleAddOrUpdateLog = (newLog: WorkoutLog) => {
     setLogs(prevLogs => {
       const existingIndex = prevLogs.findIndex(l => l.date === newLog.date);
@@ -200,9 +218,19 @@ const App: React.FC = () => {
     });
   };
 
-  // Delete Metric Logic
   const handleDeleteMetric = (dateToDelete: string) => {
      setMetrics(prev => prev.filter(m => !m.date.startsWith(dateToDelete)));
+  };
+
+  // Replay Onboarding Logic
+  const handleReplayOnboarding = () => {
+    setShowOnboarding(true);
+  };
+
+  const handleCompleteOnboarding = () => {
+    setShowOnboarding(false);
+    const updatedProfile = { ...profile, hasCompletedOnboarding: true };
+    setProfile(updatedProfile);
   };
 
   if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={() => {}} loginError={loginError} />;
@@ -212,6 +240,15 @@ const App: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-white">
+      {/* Onboarding Overlay */}
+      {showOnboarding && (
+        <Onboarding 
+          userName={profile.name} 
+          onComplete={handleCompleteOnboarding} 
+          onStepChange={setActiveTab} 
+        />
+      )}
+
       {/* Daily Reward Modal */}
       {showRewardModal && (
         <DailyRewardModal 
@@ -225,7 +262,7 @@ const App: React.FC = () => {
 
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} profile={profile} />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
-        {/* 頂部狀態列：David 教練訊息全寬顯示，不加標籤 */}
+        {/* 頂部狀態列 */}
         <div className="bg-black text-[#bef264] px-5 py-3.5 flex items-center justify-between z-20 sticky top-0 shrink-0 border-b border-white/10 shadow-2xl">
            <div className="flex items-center gap-4 flex-1 min-w-0">
               <Zap size={16} className="text-[#bef264] animate-pulse drop-shadow-[0_0_10px_#bef264] shrink-0" />
@@ -259,13 +296,13 @@ const App: React.FC = () => {
             </div>
           )}
           {activeTab === 'dashboard' && <DataEngine profile={profile} metrics={metrics} onAddMetric={(m) => setMetrics([...metrics, m])} onDeleteMetric={handleDeleteMetric} onUpdateMetrics={setMetrics} onUpdateProfile={setProfile} isDbConnected={dbConnected} />}
-          {activeTab === 'diet' && <NutritionDeck dietLogs={dietLogs} onUpdateDietLog={(log) => setDietLogs(prev => prev.some(l => l.date === log.date) ? prev.map(l => l.date === log.date ? log : l) : [...prev, log])} profile={profile} workoutLogs={logs} />}
+          {activeTab === 'diet' && <NutritionDeck dietLogs={dietLogs} onUpdateDietLog={(log) => setDietLogs(prev => prev.some(l => l.date === log.date) ? prev.map(l => l.date === log.date ? log : l) : [...prev, log])} profile={profile} workoutLogs={logs} onUpdateProfile={setProfile} />}
           {activeTab === 'journal' && <TrainingJournal logs={logs} onAddLog={handleAddOrUpdateLog} onDeleteLog={(id) => setLogs(logs.filter(log => log.id !== id))} profile={profile} onProfileUpdate={setProfile} />}
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} onDeleteRecord={(id) => setPhysiqueRecords(prev => prev.filter(r => r.id !== id))} onProfileUpdate={setProfile} />}
           {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} weeklyReports={reports} onAddReport={(r) => setReports(prev => [r, ...prev])} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
           {activeTab === 'admin' && <AdminPanel />}
-          {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={() => {}} />}
+          {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={handleReplayOnboarding} />}
         </div>
       </main>
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} isAdmin={isAdmin} />

@@ -3,14 +3,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { UserMetrics, UserProfile } from '../types.ts';
 import { calculateMatrix, getRadarData, getBMIStatus, getFFMIStatus, getLocalTimestamp, getTaiwanDate } from '../utils/calculations.ts';
-import { Target, Calendar, Scale, Activity, ChevronLeft, ChevronRight, Info, Zap, Map, Clock, Trash2 } from 'lucide-react';
+import { Target, Calendar, Scale, Activity, ChevronLeft, ChevronRight, Info, Zap, Map, Clock, Trash2, History } from 'lucide-react';
 
 interface DataEngineProps {
   profile: UserProfile;
   metrics: UserMetrics[];
   onAddMetric: (m: UserMetrics) => void;
   onUpdateMetrics?: (m: UserMetrics[]) => void;
-  onDeleteMetric: (date: string) => void; // Added Delete Prop
+  onDeleteMetric: (date: string) => void; 
   onUpdateProfile: (p: UserProfile) => void;
   isDbConnected: boolean;
 }
@@ -57,13 +57,23 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
   const [isSyncing, setIsSyncing] = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
 
-  // 當日期改變時，檢查是否有當天的數據並回填
+  // 尋找「上一次」的紀錄 (早於當前選擇日期的最後一筆)
+  const previousMetric = useMemo(() => {
+    const currentSelectedDate = new Date(input.date).getTime();
+    // 過濾出早於當前選取日期的紀錄
+    const prevMetrics = metrics.filter(m => {
+       const mDate = new Date(m.date.substring(0, 10)).getTime();
+       return mDate < currentSelectedDate;
+    });
+    // 取最後一筆 (最近的一筆)
+    return prevMetrics.length > 0 ? prevMetrics[prevMetrics.length - 1] : null;
+  }, [metrics, input.date]);
+
   const handleDateSelect = (dateStr: string) => {
-    // 尋找當天最後一筆紀錄
     const existingMetric = [...metrics].reverse().find(m => m.date.startsWith(dateStr));
     
     if (existingMetric) {
-      setExistingId(existingMetric.id); // Store ID for potential deletion
+      setExistingId(existingMetric.id); 
       const parts = existingMetric.date.split(' ');
       const timePart = parts.length > 1 ? parts[1] : '00:00';
       
@@ -76,17 +86,14 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
       });
     } else {
       setExistingId(null);
-      // 若無數據，重置輸入（保留體重方便輸入）
       setInput(prev => ({
         ...prev,
         date: dateStr,
         time: getCurrentTimeStr(),
-        // muscleMass: '' // Optional: clear or keep
       }));
     }
   };
 
-  // 當 metrics 變更時 (例如剛刪除完)，重新刷新當前日期狀態
   useEffect(() => {
     handleDateSelect(input.date);
   }, [metrics]);
@@ -100,7 +107,6 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
     const bodyFatVal = parseFloat(input.bodyFat) || 0;
     let muscleVal = parseFloat(input.muscleMass);
 
-    // 肌肉量自動校準算法 (若未輸入)
     if (!input.muscleMass || isNaN(muscleVal) || muscleVal === 0) {
       const leanMass = weightVal * (1 - bodyFatVal / 100);
       muscleVal = parseFloat((leanMass * 0.95).toFixed(1));
@@ -111,7 +117,7 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
 
     setTimeout(() => {
       onAddMetric({
-        id: existingId || Date.now().toString(), // Update existing if ID present (handled by parent usually, or just overwrite)
+        id: existingId || Date.now().toString(),
         date: fullTimestamp,
         weight: weightVal,
         bodyFat: bodyFatVal,
@@ -125,29 +131,47 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
   const handleDelete = () => {
     if (!existingId) return;
     if (confirm("確認刪除此日數據？此操作不可逆。")) {
-      onDeleteMetric(input.date); // Pass date or ID depending on parent logic. Parent uses ID usually, but here distinct by date logic in App
+      onDeleteMetric(input.date);
     }
+  };
+
+  // Custom Tooltip for Evolution Trend
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-black/90 text-white p-4 rounded-xl border border-[#bef264]/30 shadow-2xl backdrop-blur-sm">
+          <p className="text-[#bef264] text-[10px] font-black uppercase tracking-widest mb-2">{label}</p>
+          <div className="space-y-1">
+             <p className="text-sm font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-white"></span>
+                體重: {payload[0].value} KG
+             </p>
+             <p className="text-sm font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#bef264]"></span>
+                體脂: {payload[1].value} %
+             </p>
+          </div>
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
     <div className="animate-in fade-in duration-700 space-y-6 pb-32 max-w-6xl mx-auto">
       
-      {/* 戰略地圖 (綠點日曆回饋) */}
+      {/* 戰略地圖 */}
       <div className="bg-black/5 p-4 rounded-sm border border-black/5">
          <div className="flex items-center gap-2 mb-3">
             <Map size={12} className="text-black" />
             <span className="text-[10px] font-black uppercase tracking-widest text-black">生物數據同步圖 BIOMETRIC_SYNC_MAP</span>
          </div>
-         {/* 使用 w-full 與 overflow-x-auto 確保手機版可滑動 */}
          <div className="w-full overflow-x-auto custom-scrollbar pb-2">
             <div className="flex gap-1.5 min-w-max">
                 {Array.from({ length: 31 }).map((_, i) => {
                    const day = (i + 1).toString().padStart(2, '0');
-                   // 簡單處理跨月份問題，這裡假設操作當月
-                   const yearMonth = input.date.substring(0, 7); // YYYY-MM
+                   const yearMonth = input.date.substring(0, 7); 
                    const dateStr = `${yearMonth}-${day}`;
-                   
-                   // 檢查這一天是否有數據
                    const isActive = activeDays.has(dateStr);
                    const isSelected = input.date === dateStr;
                    
@@ -174,7 +198,6 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
            <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-widest">Biological Biometric Monitoring System</p>
         </div>
         
-        {/* 日期選擇器 */}
         <div className="flex items-center gap-2 bg-gray-50 p-2 border border-gray-100 shadow-sm">
            <button onClick={() => { const d = new Date(input.date); d.setDate(d.getDate()-1); handleDateSelect(d.toISOString().split('T')[0]); }} className="p-2 bg-white border border-gray-100 text-black shadow-sm hover:shadow-md transition-all"><ChevronLeft size={16}/></button>
            
@@ -223,7 +246,10 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-end relative z-10">
            {/* 體重 - 必填 */}
            <div className="space-y-3">
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2"><Scale size={14} /> 體重 WEIGHT <span className="text-red-500">*</span></label>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center justify-between">
+                 <span className="flex items-center gap-2"><Scale size={14} /> 體重 WEIGHT <span className="text-red-500">*</span></span>
+                 {previousMetric && <span className="text-gray-600 flex items-center gap-1"><History size={10}/> Last: {previousMetric.weight}</span>}
+              </label>
               <div className="relative h-14 flex items-center bg-white/5 border-b-2 border-white/20 px-1 focus-within:border-[#bef264] transition-all">
                 <input type="number" step="0.1" required value={input.weight} onChange={e => setInput({...input, weight: e.target.value})} className="w-full bg-transparent font-mono font-black text-3xl outline-none text-white pr-8" />
                 <span className="absolute right-2 text-[10px] font-black text-gray-600">KG</span>
@@ -232,7 +258,10 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
 
            {/* 體脂 - 必填 */}
            <div className="space-y-3">
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">體脂 FAT % <span className="text-red-500">*</span></label>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center justify-between">
+                 <span className="flex items-center gap-2">體脂 FAT % <span className="text-red-500">*</span></span>
+                 {previousMetric && <span className="text-gray-600 flex items-center gap-1"><History size={10}/> Last: {previousMetric.bodyFat}</span>}
+              </label>
               <div className="relative h-14 flex items-center bg-white/5 border-b-2 border-white/20 px-1 focus-within:border-[#bef264] transition-all">
                 <input type="number" step="0.1" required value={input.bodyFat} onChange={e => setInput({...input, bodyFat: e.target.value})} className="w-full bg-transparent font-mono font-black text-3xl outline-none text-white pr-8" />
                 <span className="absolute right-2 text-[10px] font-black text-gray-600">%</span>
@@ -241,7 +270,10 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
 
            {/* 肌肉量 - 選填 (自動計算) */}
            <div className="space-y-3">
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">肌肉量 MUSCLE</label>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] flex items-center justify-between">
+                 <span className="flex items-center gap-2">肌肉量 MUSCLE</span>
+                 {previousMetric && <span className="text-gray-600 flex items-center gap-1"><History size={10}/> Last: {previousMetric.muscleMass}</span>}
+              </label>
               <div className="relative h-14 flex items-center bg-white/5 border-b-2 border-white/20 px-1 focus-within:border-[#bef264] transition-all group">
                 <input 
                   type="number" step="0.1" 
@@ -301,7 +333,6 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
               </div>
               <div className="group/info relative">
                  <Info size={16} className="text-gray-300 hover:text-black cursor-help transition-colors" />
-                 {/* Fixed Tooltip Styling */}
                  <div className="absolute right-0 top-8 w-64 bg-black text-white p-5 text-[10px] font-bold rounded-sm opacity-0 group-hover/info:opacity-100 transition-all z-50 pointer-events-none shadow-2xl border border-[#bef264]/20">
                     <p className="text-[#bef264] border-b border-white/10 pb-2 mb-3 font-black tracking-widest uppercase">指標定義 DEFINITIONS</p>
                     <div className="space-y-2 leading-relaxed">
@@ -318,7 +349,6 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
              <ResponsiveContainer width="100%" height="100%">
                <RadarChart data={enhancedRadarData} margin={{ top: 20, right: 30, left: 30, bottom: 20 }}>
                  <PolarGrid stroke="#f1f5f9" strokeWidth={1} />
-                 {/* Increased Font Size and Radius */}
                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#000', fontSize: 12, fontWeight: 900 }} />
                  <Radar name="Physique" dataKey="A" stroke="#000" strokeWidth={3} fill="#bef264" fillOpacity={0.6} />
                </RadarChart>
@@ -348,9 +378,10 @@ const DataEngine: React.FC<DataEngineProps> = ({ profile, metrics = [], onAddMet
                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
                  <XAxis dataKey="date" hide />
                  <YAxis fontSize={10} stroke="#cbd5e1" tickFormatter={(v) => `${v}`} />
-                 <Tooltip contentStyle={{ background: '#000', border: 'none', color: '#fff', fontSize: '11px', fontWeight: '900', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }} />
-                 <Area type="monotone" dataKey="weight" name="體重 WEIGHT (KG)" stroke="#000" strokeWidth={4} fillOpacity={1} fill="url(#colorWeight)" dot={{ r: 4, fill: '#000', strokeWidth: 2, stroke: '#fff' }} />
-                 <Area type="monotone" dataKey="bodyFat" name="體脂 FAT (%)" stroke="#bef264" strokeWidth={4} fillOpacity={1} fill="url(#colorFat)" dot={{ r: 4, fill: '#bef264', strokeWidth: 2, stroke: '#fff' }} />
+                 <Tooltip content={<CustomTooltip />} />
+                 {/* 增大數據點半徑，方便點擊查看 */}
+                 <Area type="monotone" dataKey="weight" name="體重" stroke="#000" strokeWidth={4} fillOpacity={1} fill="url(#colorWeight)" dot={{ r: 6, fill: '#000', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8, stroke: '#000' }} />
+                 <Area type="monotone" dataKey="bodyFat" name="體脂" stroke="#bef264" strokeWidth={4} fillOpacity={1} fill="url(#colorFat)" dot={{ r: 6, fill: '#bef264', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8, stroke: '#bef264' }} />
                </AreaChart>
              </ResponsiveContainer>
            </div>

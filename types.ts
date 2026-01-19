@@ -153,6 +153,10 @@ export interface UserProfile {
     carbs: number;
     fat: number;
   };
+  dietaryContext?: {
+    cravings: string; // 想吃的東西 (暫存)
+    healthFocus: string; // 健康目標 (降血脂、降血糖等)
+  };
   role?: 'admin' | 'user';
   lastDailyFeedbackDate?: string;
   lastPhysiqueAnalysisDate?: string;
