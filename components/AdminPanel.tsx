@@ -5,7 +5,7 @@ import { UserProfile, FitnessGoal, FoodItem } from '../types.ts';
 import { FOOD_DATABASE } from '../utils/foodDatabase.ts';
 import { 
   Users, Trash2, Search, RefreshCcw, ShieldCheck, 
-  Utensils, CheckCircle, AlertTriangle, XCircle, Info, Tag, Store, User as UserIcon, ShieldAlert, Edit3
+  Utensils, CheckCircle, AlertTriangle, XCircle, Info, Tag, Store, User as UserIcon, ShieldAlert, Edit3, ShieldHalf, UserPlus
 } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
@@ -38,7 +38,8 @@ const AdminPanel: React.FC = () => {
   };
 
   const handleApproveFood = (id: string) => {
-     alert("數據已校準，同步至全體矩陣。");
+     alert("數據已校準，同步至全體矩陣中心。");
+     setCurrentFoods(prev => prev.map(f => f.id === id ? { ...f, isPending: false } : f));
   };
 
   const updateFoodMacro = (id: string, field: string, value: string) => {
@@ -51,7 +52,7 @@ const AdminPanel: React.FC = () => {
   };
 
   return (
-    <div className="space-y-16 max-w-7xl mx-auto pb-40 px-6">
+    <div className="space-y-16 max-w-7xl mx-auto pb-40 px-6 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-10 border-b-8 border-black pb-10">
         <div className="flex items-start gap-8">
           <div className="p-6 bg-black text-[#bef264] shadow-2xl">
@@ -59,17 +60,17 @@ const AdminPanel: React.FC = () => {
           </div>
           <div>
             <p className="text-xs font-mono font-black text-gray-400 uppercase tracking-[0.4em] mb-2">Root Terminal System</p>
-            <h2 className="text-5xl font-black text-black tracking-tighter uppercase leading-none">管理中心</h2>
+            <h2 className="text-5xl font-black text-black tracking-tighter uppercase leading-none">管理權限矩陣</h2>
           </div>
         </div>
       </header>
 
       <div className="flex border-b-4 border-gray-100 gap-10">
          <button onClick={() => setActiveView('USERS')} className={`px-10 py-6 text-sm font-black uppercase tracking-widest border-b-8 transition-all flex items-center gap-3 ${activeView === 'USERS' ? 'border-black text-black' : 'border-transparent text-gray-400'}`}>
-           <Users size={20} /> 成員戰力管理
+           <Users size={20} /> 成員戰略清單
          </button>
          <button onClick={() => setActiveView('FOODS')} className={`px-10 py-6 text-sm font-black uppercase tracking-widest border-b-8 transition-all flex items-center gap-3 ${activeView === 'FOODS' ? 'border-black text-black' : 'border-transparent text-gray-400'}`}>
-           <Utensils size={20} /> 食物資料庫審核
+           <Utensils size={20} /> 資料庫協作審核
          </button>
       </div>
 
@@ -118,37 +119,39 @@ const AdminPanel: React.FC = () => {
            <div className="bg-orange-50 border-l-8 border-orange-400 p-6 flex items-start gap-4">
               <ShieldAlert size={28} className="text-orange-400 mt-1" />
               <div>
-                 <h4 className="text-lg font-black uppercase text-orange-900">審核注意：SECURITY_ALERT</h4>
-                 <p className="text-sm font-bold text-orange-800">請仔細核對「來源」與「營養成分」。惡意或錯誤的數據會破壞全體學員的戰術矩陣。推薦优先審核有條碼的項目。</p>
+                 <h4 className="text-lg font-black uppercase text-orange-900">審核注意：DB_SECURITY_PROTOCOL</h4>
+                 <p className="text-sm font-bold text-orange-800">請監控由用戶協作新增的資料。檢查「建立者 ID」以識別信譽。惡意數值會影響全體數據矩陣的精準度。</p>
               </div>
            </div>
 
            <div className="grid grid-cols-1 gap-6">
               {currentFoods.map(food => (
-                 <div key={food.id} className="bg-white border-2 border-gray-100 p-8 flex flex-col items-stretch gap-6 hover:border-black transition-all group rounded-2xl shadow-md">
+                 <div key={food.id} className={`bg-white border-2 p-8 flex flex-col items-stretch gap-6 hover:border-black transition-all group rounded-2xl shadow-md ${food.isPending ? 'border-orange-200 ring-2 ring-orange-50' : 'border-gray-100'}`}>
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                        <div className="flex items-center gap-6 flex-1">
-                          <div className="w-20 h-20 bg-gray-50 text-black border border-gray-100 flex items-center justify-center font-black text-xs shrink-0 group-hover:bg-[#bef264] transition-colors rounded-xl uppercase">{food.category}</div>
+                          <div className={`w-20 h-20 text-black border flex items-center justify-center font-black text-[10px] shrink-0 transition-colors rounded-xl uppercase ${food.isPending ? 'bg-orange-100 border-orange-200' : 'bg-gray-50 border-gray-100 group-hover:bg-[#bef264]'}`}>{food.category}</div>
                           <div className="space-y-2">
                              <div className="flex items-center gap-4">
                                 <h4 className="text-2xl font-black text-black tracking-tight">{food.name}</h4>
-                                {food.barcode && <span className="bg-gray-100 text-gray-500 px-3 py-1 text-[10px] font-mono font-bold flex items-center gap-2"><Tag size={12}/> {food.barcode}</span>}
+                                {food.isPending && <span className="bg-orange-500 text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest animate-pulse">待審核</span>}
                              </div>
-                             <div className="flex flex-wrap gap-6">
-                                <div className="flex items-center gap-2 text-xs font-black text-gray-600 uppercase"><Store size={14} className="text-gray-300"/> {food.source || '用戶手動建立'}</div>
-                                <div className="flex items-center gap-2 text-xs font-black text-gray-300 uppercase"><UserIcon size={14}/> ROOT_ADMIN</div>
+                             <div className="flex flex-wrap gap-6 items-center">
+                                <div className="flex items-center gap-2 text-xs font-black text-gray-600 uppercase"><UserPlus size={14} className="text-gray-300"/> 建立者: <span className="text-black">{food.createdBy || 'SYSTEM_CORE'}</span></div>
+                                <div className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest"><Tag size={12}/> {food.id}</div>
                              </div>
                           </div>
                        </div>
                        <div className="flex gap-3 w-full md:w-auto">
-                          <button onClick={() => handleApproveFood(food.id)} className="flex-1 md:flex-none px-8 py-4 bg-black text-[#bef264] text-[11px] font-black uppercase tracking-widest hover:bg-lime-400 hover:text-black transition-all rounded-xl shadow-lg">核准通核</button>
-                          <button onClick={() => handleDeleteFood(food.id)} className="flex-1 md:flex-none px-8 py-4 border-2 border-red-50 text-red-400 hover:bg-red-50 text-[11px] font-black uppercase tracking-widest transition-all rounded-xl">移除項目</button>
+                          {food.isPending && (
+                             <button onClick={() => handleApproveFood(food.id)} className="flex-1 md:flex-none px-8 py-4 bg-[#bef264] text-black text-[11px] font-black uppercase tracking-widest hover:bg-black hover:text-[#bef264] transition-all rounded-xl shadow-lg border-2 border-transparent">核准入庫</button>
+                          )}
+                          <button onClick={() => handleDeleteFood(food.id)} className="flex-1 md:flex-none px-8 py-4 border-2 border-red-50 text-red-400 hover:bg-red-50 text-[11px] font-black uppercase tracking-widest transition-all rounded-xl">刪除作廢</button>
                        </div>
                     </div>
                     
-                    <div className="grid grid-cols-4 gap-4 bg-gray-50 p-6 rounded-xl border border-gray-100">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-6 rounded-xl border border-gray-100">
                        {[
-                         {l:'熱量', f:'calories'}, {l:'蛋白質', f:'protein'}, {l:'碳水', f:'carbs'}, {l:'脂肪', f:'fat'}
+                         {l:'熱量 (K)', f:'calories'}, {l:'蛋白質 (G)', f:'protein'}, {l:'碳水 (G)', f:'carbs'}, {l:'脂肪 (G)', f:'fat'}
                        ].map(macro => (
                           <div key={macro.f} className="space-y-2">
                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Edit3 size={10}/> {macro.l}</label>

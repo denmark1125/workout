@@ -7,7 +7,6 @@ const MODEL_PREMIUM = 'gemini-3-pro-preview';
 
 // Correct initialization as per SDK guidelines using process.env.API_KEY exclusively.
 const getAIInstance = () => {
-  // Always use process.env.API_KEY for the Gemini API client initialization
   return new GoogleGenAI({ apiKey: import.meta.env.VITE_WORKOUT_GEMINI_API });
 };
 
