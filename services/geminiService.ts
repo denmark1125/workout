@@ -8,8 +8,8 @@ const MODEL_PREMIUM = 'gemini-3-pro-preview';
 const MODEL_VISION = 'gemini-2.5-flash-image'; 
 
 const getAIInstance = () => {
-  // Use import.meta.env.VITE_WORKOUT_GEMINI_API directly for initialization as per guidelines
-  return new GoogleGenAI({ apiKey: import.meta.env.VITE_WORKOUT_GEMINI_API });
+  // Always use process.env.API_KEY for the Gemini API key as per guidelines
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 // Added missing testConnection export for system health checks
