@@ -13,6 +13,7 @@ import RewardVault from './components/RewardVault.tsx';
 import NutritionDeck from './components/NutritionDeck.tsx'; 
 import DailyRewardModal from './components/DailyRewardModal.tsx';
 import Onboarding from './components/Onboarding.tsx';
+import AIConsole from './components/AIConsole.tsx';
 import { UserProfile, UserMetrics, FitnessGoal, WorkoutLog, PhysiqueRecord, DietLog, WeeklyReportData } from './types.ts';
 import { syncToCloud, fetchFromCloud, db, recordLoginEvent } from './services/dbService.ts';
 import { getLocalDavidGreeting, getDailyBriefing } from './services/geminiService.ts'; 
@@ -87,7 +88,14 @@ const App: React.FC = () => {
           fetchFromCloud('reports', currentMemberId)
         ]);
         
-        if (p) setProfile(prev => ({ ...DEFAULT_PROFILE, ...prev, ...p }));
+        if (p) {
+          // 重要修正：確保 profile.memberId 絕對被注入，否則 dAVID 會領不到金幣
+          setProfile(prev => ({ ...DEFAULT_PROFILE, ...prev, ...p, memberId: currentMemberId }));
+          if (p.role === 'admin') setIsAdmin(true);
+        } else {
+          // 如果是第一次登入的 admin_roots
+          setProfile(prev => ({ ...prev, memberId: currentMemberId }));
+        }
         setMetrics(Array.isArray(m) ? m : []);
         setLogs(Array.isArray(l) ? l : []);
         setPhysiqueRecords(Array.isArray(ph) ? ph : []);
@@ -105,25 +113,39 @@ const App: React.FC = () => {
 
   // Daily Reward Check Logic
   useEffect(() => {
-    if (isDataLoaded && isAuthenticated && profile.memberId) {
+    // 修正點：判斷條件改用 currentMemberId，避免 profile.memberId 因為同步延遲而為空
+    if (isDataLoaded && isAuthenticated && currentMemberId) {
       const today = getTaiwanDate();
-      // 如果最後登入日期不是今天 -> 顯示獎勵 (代表今天第一次登入)
       if (profile.lastLoginDate !== today) {
+        
+        // 修正點：檢測是否斷更（Gap Check）
+        let finalStreak = profile.loginStreak || 1;
+        if (profile.lastLoginDate) {
+           const lastDate = new Date(profile.lastLoginDate);
+           const todayDate = new Date(today);
+           const diffTime = Math.abs(todayDate.getTime() - lastDate.getTime());
+           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+           
+           // 如果差距超過 1 天，代表斷更了，重置天數為 1
+           if (diffDays > 1) {
+              finalStreak = 1;
+              setProfile(prev => ({ ...prev, loginStreak: 1 }));
+           }
+        }
+
         setShowRewardModal(true);
         setIsLoadingBriefing(true);
-        // 獲取每日簡報 (非同步，不阻塞 UI)
-        getDailyBriefing(profile.loginStreak || 1).then(brief => {
+        getDailyBriefing(finalStreak, currentMemberId).then(brief => {
            setDailyBriefing(brief);
            setIsLoadingBriefing(false);
         });
       }
-
-      // Check Onboarding status
+      
       if (!profile.hasCompletedOnboarding) {
         setShowOnboarding(true);
       }
     }
-  }, [isDataLoaded, isAuthenticated, profile.lastLoginDate, profile.memberId, profile.hasCompletedOnboarding]);
+  }, [isDataLoaded, isAuthenticated, profile.lastLoginDate, currentMemberId, profile.hasCompletedOnboarding]);
 
   useEffect(() => {
     if (!isDataLoaded || !isAuthenticated || !currentMemberId) return;
@@ -181,12 +203,14 @@ const App: React.FC = () => {
   const handleClaimReward = async () => {
     if (!currentMemberId) return;
     const today = getTaiwanDate();
+    
+    // 計算這次領取的獎勵索引
     const rewardId = (profile.loginStreak || 1) - 1; 
     const newStreak = (profile.loginStreak || 0) + 1;
     
-    // 更新 Profile: 標記今日已領取 (更新日期)，增加 streak，加入獎勵 ID
     const updatedProfile = {
       ...profile,
+      memberId: currentMemberId, // 確保領取時 ID 存在
       lastLoginDate: today,
       loginStreak: newStreak,
       collectedRewardIds: [...(profile.collectedRewardIds || []), rewardId]
@@ -194,16 +218,11 @@ const App: React.FC = () => {
     
     setProfile(updatedProfile);
     setShowRewardModal(false);
-    
-    // 強制立即同步，確保獎勵領取紀錄寫入
     setIsSyncing(true);
+    
     try {
       await syncToCloud('profiles', updatedProfile, currentMemberId);
-    } catch(e) {
-      console.error("Reward sync failed", e);
-    } finally {
-      setIsSyncing(false);
-    }
+    } catch(e) {} finally { setIsSyncing(false); }
   };
 
   const handleAddOrUpdateLog = (newLog: WorkoutLog) => {
@@ -222,7 +241,6 @@ const App: React.FC = () => {
      setMetrics(prev => prev.filter(m => !m.date.startsWith(dateToDelete)));
   };
 
-  // Replay Onboarding Logic
   const handleReplayOnboarding = () => {
     setShowOnboarding(true);
   };
@@ -233,58 +251,26 @@ const App: React.FC = () => {
     setProfile(updatedProfile);
   };
 
-  if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={() => {}} loginError={loginError} />;
+  if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} onRegister={(p) => { setProfile(p); setCurrentMemberId(p.memberId); setIsAuthenticated(true); sessionStorage.setItem('matrix_session', 'active'); localStorage.setItem('matrix_active_user', p.memberId); }} loginError={loginError} />;
 
   const syncEnabled = profile.privacySettings?.syncMetrics ?? true;
   const currentReward = REWARDS_DATABASE[(profile.loginStreak || 1) - 1] || REWARDS_DATABASE[0];
 
   return (
     <div className="flex min-h-screen bg-white">
-      {/* Onboarding Overlay */}
-      {showOnboarding && (
-        <Onboarding 
-          userName={profile.name} 
-          onComplete={handleCompleteOnboarding} 
-          onStepChange={setActiveTab} 
-        />
-      )}
-
-      {/* Daily Reward Modal */}
-      {showRewardModal && (
-        <DailyRewardModal 
-          reward={currentReward} 
-          streak={profile.loginStreak || 1} 
-          onClaim={handleClaimReward}
-          briefing={dailyBriefing}
-          isLoadingBriefing={isLoadingBriefing}
-        />
-      )}
-
+      {showOnboarding && <Onboarding userName={profile.name} onComplete={handleCompleteOnboarding} onStepChange={setActiveTab} />}
+      {showRewardModal && <DailyRewardModal reward={currentReward} streak={profile.loginStreak || 1} onClaim={handleClaimReward} briefing={dailyBriefing} isLoadingBriefing={isLoadingBriefing} />}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} memberId={currentMemberId || ''} isAdmin={isAdmin} onLogout={handleLogout} profile={profile} />
       <main className="flex-1 overflow-x-hidden relative flex flex-col">
-        {/* 頂部狀態列 */}
         <div className="bg-black text-[#bef264] px-5 py-3.5 flex items-center justify-between z-20 sticky top-0 shrink-0 border-b border-white/10 shadow-2xl">
            <div className="flex items-center gap-4 flex-1 min-w-0">
               <Zap size={16} className="text-[#bef264] animate-pulse drop-shadow-[0_0_10px_#bef264] shrink-0" />
               <div className="flex-1 truncate">
-                <p className="text-[11px] md:text-[13px] font-black font-mono text-white tracking-tight">
-                   {davidGreeting || 'David 正在對齊全球健身戰略資料庫...'}
-                </p>
+                <p className="text-[11px] md:text-[13px] font-black font-mono text-white tracking-tight">{davidGreeting || 'David 正在對齊全球健身戰略資料庫...'}</p>
               </div>
            </div>
-           
            <div className="flex items-center gap-4 ml-6 shrink-0">
-              {!syncEnabled ? (
-                <ShieldOff size={15} className="text-gray-600" />
-              ) : syncError ? (
-                <AlertTriangle size={15} className="text-red-500 animate-pulse" />
-              ) : isSyncing ? (
-                <Loader2 size={15} className="text-[#bef264] animate-spin" />
-              ) : dbConnected ? (
-                <Cloud size={15} className="text-[#bef264] drop-shadow-[0_0_10px_#bef264]" />
-              ) : (
-                <CloudOff size={15} className="text-gray-600" />
-              )}
+              {!syncEnabled ? <ShieldOff size={15} className="text-gray-600" /> : syncError ? <AlertTriangle size={15} className="text-red-500 animate-pulse" /> : isSyncing ? <Loader2 size={15} className="text-[#bef264] animate-spin" /> : dbConnected ? <Cloud size={15} className="text-[#bef264] drop-shadow-[0_0_10px_#bef264]" /> : <CloudOff size={15} className="text-gray-600" />}
            </div>
         </div>
 
@@ -301,6 +287,7 @@ const App: React.FC = () => {
           {activeTab === 'scan' && <PhysiqueScanner profile={profile} records={physiqueRecords} onAddRecord={(r) => setPhysiqueRecords([r, ...physiqueRecords])} onDeleteRecord={(id) => setPhysiqueRecords(prev => prev.filter(r => r.id !== id))} onProfileUpdate={setProfile} />}
           {activeTab === 'report' && <WeeklyReport profile={profile} metrics={metrics} logs={logs} physiqueRecords={physiqueRecords} onProfileUpdate={setProfile} weeklyReports={reports} onAddReport={(r) => setReports(prev => [r, ...prev])} />}
           {activeTab === 'vault' && <RewardVault collectedIds={profile.collectedRewardIds || []} />}
+          {activeTab === 'aiconsole' && <AIConsole />}
           {activeTab === 'admin' && <AdminPanel />}
           {activeTab === 'settings' && <Settings profile={profile} setProfile={setProfile} onReplayOnboarding={handleReplayOnboarding} />}
         </div>

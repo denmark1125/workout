@@ -92,7 +92,7 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
      
      setIsCalibrating(true);
      try {
-       // 優先使用 AI 計算
+       // Fixed: Added profile.memberId as the required 8th argument to calculateAiNutritionPlan
        const aiResult = await calculateAiNutritionPlan(
          75, // 若有實際體重應從 metrics 獲取，此處簡化
          profile.height,
@@ -100,7 +100,8 @@ const Settings: React.FC<SettingsProps> = ({ profile, setProfile, onReplayOnboar
          profile.gender,
          profile.activityLevel || ActivityLevel.MODERATE,
          profile.goal,
-         profile.dietaryPreference || DietaryPreference.OMNIVORE
+         profile.dietaryPreference || DietaryPreference.OMNIVORE,
+         profile.memberId
        );
 
        if (aiResult) {

@@ -63,20 +63,34 @@ const PhysiqueScanner: React.FC<{ profile: UserProfile; records: PhysiqueRecord[
     return () => clearInterval(interval);
   }, [loading]);
 
+  // 省錢戰術：強制將體態照片限制在 800px，這能大幅降低影像 Token
   const compressImage = (base64Str: string): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = base64Str;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1000;
+        const MAX_DIMENSION = 800; // 下修至 800px
         let width = img.width;
         let height = img.height;
-        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        
+        if (width > height) {
+          if (width > MAX_DIMENSION) {
+            height *= MAX_DIMENSION / width;
+            width = MAX_DIMENSION;
+          }
+        } else {
+          if (height > MAX_DIMENSION) {
+            width *= MAX_DIMENSION / height;
+            height = MAX_DIMENSION;
+          }
+        }
+        
         canvas.width = width; canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+        // 品質 0.7 達成體積與清晰度的平衡
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
       };
     });
   };
@@ -149,7 +163,7 @@ const PhysiqueScanner: React.FC<{ profile: UserProfile; records: PhysiqueRecord[
             ) : (
               <div className="text-center p-8 space-y-3">
                 <Camera className="w-10 h-10 text-gray-200 mx-auto" />
-                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest leading-relaxed">點擊上傳全身照片<br/>啟動深度視覺分析</p>
+                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest leading-relaxed">點擊上傳全身照片<br/>啟動深度視覺分析<br/><span className="text-[9px] text-[#bef264] bg-black px-1 mt-2 inline-block">系統已啟動省錢壓縮模式 (800px)</span></p>
               </div>
             )}
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" disabled={loading} />

@@ -1,57 +1,69 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+
+import React, { useState, useMemo, useRef } from 'react';
 import { DietLog, MealRecord, UserProfile, WorkoutLog, FoodItem, MacroNutrients } from '../types.ts';
-import { analyzeFoodImages, getAiMealRecommendation } from '../services/geminiService.ts';
+import { analyzeFoodImages } from '../services/geminiService.ts';
 import { getTaiwanDate } from '../utils/calculations.ts';
 import { FOOD_DATABASE } from '../utils/foodDatabase.ts';
-import { Plus, ChevronLeft, ChevronRight, X, Utensils, Search, Camera, Zap, Check, Map, Database, Scan, Info, Flame, Droplets, Beef, Wheat, Sun, Moon, Coffee, Sandwich, PenTool, Scale, Save, Trash2, ArrowRight, ChefHat, Sparkles, Brain, Activity } from 'lucide-react';
+import { 
+  Plus, ChevronLeft, ChevronRight, X, Utensils, Search, Camera, Zap, 
+  Database, Scale, Save, Trash2, Clock, History, LayoutGrid, Flame,
+  Activity
+} from 'lucide-react';
 import TacticalLoader from './TacticalLoader.tsx';
 
-const NutritionDeck: React.FC<{ dietLogs: DietLog[]; onUpdateDietLog: (log: DietLog) => void; profile: UserProfile; workoutLogs: WorkoutLog[]; onUpdateProfile: (p: UserProfile) => void; }> = ({ dietLogs = [], onUpdateDietLog, profile, workoutLogs = [], onUpdateProfile }) => {
+// 圖片壓縮函數
+const compressAndResizeImage = (file: File, maxWidth = 800): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const MAX_DIMENSION = maxWidth;
+        if (width > height) {
+          if (width > MAX_DIMENSION) {
+            height *= MAX_DIMENSION / width;
+            width = MAX_DIMENSION;
+          }
+        } else {
+          if (height > MAX_DIMENSION) {
+            width *= MAX_DIMENSION / height;
+            height = MAX_DIMENSION;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+    };
+  });
+};
+
+const NutritionDeck: React.FC<{ dietLogs: DietLog[]; onUpdateDietLog: (log: DietLog) => void; profile: UserProfile; workoutLogs: WorkoutLog[]; onUpdateProfile: (p: UserProfile) => void; }> = ({ dietLogs = [], onUpdateDietLog, profile, workoutLogs = [] }) => {
   const [selectedDate, setSelectedDate] = useState(getTaiwanDate());
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [activeMealType, setActiveMealType] = useState<keyof DietLog['meals']>('breakfast');
   
-  // Data States
-  const [localFoodDb, setLocalFoodDb] = useState<FoodItem[]>(FOOD_DATABASE);
-  
-  // Modal States
-  const [entryTab, setEntryTab] = useState<'MANUAL' | 'CAMERA' | 'AI_ADVISOR'>('MANUAL');
+  const [entryTab, setEntryTab] = useState<'QUICK' | 'SEARCH' | 'AI'>('QUICK');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
-  // AI Advisor States
-  const [cravings, setCravings] = useState(profile.dietaryContext?.cravings || '');
-  const [healthFocus, setHealthFocus] = useState(profile.dietaryContext?.healthFocus || '');
-  const [aiRecommendation, setAiRecommendation] = useState<string | null>(null);
-  const [isGeneratingMenu, setIsGeneratingMenu] = useState(false);
-
-  // Create New Food Mode
-  const [isCreatingFood, setIsCreatingFood] = useState(false);
-  const [newFoodData, setNewFoodData] = useState({
-    name: '',
-    unitLabel: '1份',
-    unitType: 'serving' as 'serving' | 'g' | 'ml',
-    calories: '', protein: '', carbs: '', fat: ''
-  });
-
-  // Multi-Photo Analysis State
-  const [scannedImages, setScannedImages] = useState<string[]>([]);
-  const [analyzedItems, setAnalyzedItems] = useState<any[]>([]); // AI Results
-  
-  // Manual Entry Data
-  const [selectedFoodBase, setSelectedFoodBase] = useState<FoodItem | null>(null);
-  const [inputName, setInputName] = useState('');
-  const [inputQuantity, setInputQuantity] = useState<string>('1');
-  const [inputUnit, setInputUnit] = useState<'serving' | 'g' | 'ml'>('serving');
-  const [currentMacros, setCurrentMacros] = useState<MacroNutrients>({ calories: 0, protein: 0, carbs: 0, fat: 0 });
-
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // 快速輸入狀態
+  const [quickMealName, setQuickMealName] = useState('');
+  const [quickMacros, setQuickMacros] = useState<MacroNutrients>({ calories: 500, protein: 30, carbs: 50, fat: 15 });
 
   const currentLog = useMemo(() => {
     return dietLogs.find(l => l.date === selectedDate) || { id: selectedDate, date: selectedDate, meals: { breakfast:[], lunch:[], dinner:[], snack:[], nightSnack:[] }, waterIntake:0 };
   }, [dietLogs, selectedDate]);
 
-  // Totals Calculation
   const totals = useMemo(() => {
     const allMeals = Object.values(currentLog.meals).flat() as MealRecord[];
     return allMeals.reduce((acc, m) => ({
@@ -70,656 +82,309 @@ const NutritionDeck: React.FC<{ dietLogs: DietLog[]; onUpdateDietLog: (log: Diet
   const targetCal = profile.dailyCalorieTarget || 2000;
   const remainingCal = targetCal - totals.calories + burnedCalories;
 
-  // --- AI Advisor Handler ---
-  const handleGenerateRecommendation = async () => {
-    // Save preferences first
-    onUpdateProfile({
-      ...profile,
-      dietaryContext: { cravings, healthFocus }
-    });
-
-    setIsGeneratingMenu(true);
-    setAiRecommendation(null);
-    try {
-      // Mock metrics retrieval - in a real app, pass metrics prop or fetch inside
-      const metrics = []; 
-      const result = await getAiMealRecommendation(profile, metrics, cravings, healthFocus);
-      setAiRecommendation(result);
-    } catch(e) {
-      setAiRecommendation("AI 連線忙碌中，請稍後再試。");
-    } finally {
-      setIsGeneratingMenu(false);
-    }
-  };
-
-  // --- Handlers ---
-
-  const resetEntryForm = () => {
-    setSearchQuery('');
-    setSelectedFoodBase(null);
-    setInputName('');
-    setInputQuantity('1');
-    setInputUnit('serving');
-    setCurrentMacros({ calories: 0, protein: 0, carbs: 0, fat: 0 });
-    setEntryTab('MANUAL');
-    setIsCreatingFood(false);
-    setScannedImages([]);
-    setAnalyzedItems([]);
-    setNewFoodData({ name: '', unitLabel: '1份', unitType: 'serving', calories: '', protein: '', carbs: '', fat: '' });
-    // Reset AI view but keep inputs
-    setAiRecommendation(null);
-  };
-
-  // --- Create New Food Logic ---
-  const handleCreateFood = () => {
-    const { name, unitLabel, unitType, calories, protein, carbs, fat } = newFoodData;
-    if (!name || !calories) { alert("名稱與熱量為必填"); return; }
-
-    const newFood: FoodItem = {
-      id: `custom_${Date.now()}`,
-      name,
-      unit: unitLabel,
-      category: 'STAPLE',
-      source: '自定義',
-      macros: {
-        calories: parseInt(calories) || 0,
-        protein: parseFloat(protein) || 0,
-        carbs: parseFloat(carbs) || 0,
-        fat: parseFloat(fat) || 0
-      }
-    };
-
-    setLocalFoodDb([newFood, ...localFoodDb]);
-    setIsCreatingFood(false);
-    handleSelectFood(newFood); // Auto-select the created food
-  };
-
-  // --- Selection & Calculation Logic ---
-  const handleSelectFood = (food: FoodItem) => {
-    setSelectedFoodBase(food);
-    setInputName(food.name);
-    setInputQuantity('1');
-    // Determine unit type from food unit string (simple heuristic)
-    const lowerUnit = food.unit.toLowerCase();
-    if (lowerUnit.includes('g') && !lowerUnit.includes('serving')) setInputUnit('g');
-    else if (lowerUnit.includes('ml')) setInputUnit('ml');
-    else setInputUnit('serving');
-    
-    // Initial macro set
-    setCurrentMacros({ ...food.macros });
-    setSearchQuery(''); 
-  };
-
-  // Auto-Calculate Macros when Quantity/Unit changes
-  useEffect(() => {
-    if (selectedFoodBase) {
-      const qty = parseFloat(inputQuantity) || 0;
-      let multiplier = 1;
-      
-      if (inputUnit === 'serving') {
-        multiplier = qty;
-      } else {
-        const baseMatch = selectedFoodBase.unit.match(/(\d+)(g|ml)/i);
-        const baseAmount = baseMatch ? parseInt(baseMatch[1]) : 1; 
-        
-        if (baseMatch) {
-             multiplier = qty / baseAmount;
-        } else {
-             multiplier = qty / 100;
-        }
-      }
-
-      setCurrentMacros({
-        calories: Math.round(selectedFoodBase.macros.calories * multiplier),
-        protein: parseFloat((selectedFoodBase.macros.protein * multiplier).toFixed(1)),
-        carbs: parseFloat((selectedFoodBase.macros.carbs * multiplier).toFixed(1)),
-        fat: parseFloat((selectedFoodBase.macros.fat * multiplier).toFixed(1)),
-      });
-    }
-  }, [inputQuantity, inputUnit, selectedFoodBase]);
-
-  const handleManualMacroChange = (field: keyof MacroNutrients, value: string) => {
-    setCurrentMacros(prev => ({ ...prev, [field]: parseFloat(value) || 0 }));
-  };
-
-  // --- Multi-Photo Logic ---
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    // Limit to 5
-    const filesToProcess = Array.from(files).slice(0, 5);
-    const readers = filesToProcess.map(file => new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(file as Blob);
-    }));
-
-    const base64Images = await Promise.all(readers);
-    setScannedImages(base64Images);
-    
-    setIsAnalyzing(true);
-    try {
-      const results = await analyzeFoodImages(base64Images, profile);
-      // Transform results to editable format
-      const editableItems = results.map((item: any, idx: number) => ({
-        id: idx,
-        name: item.name,
-        qty: '1',
-        unit: '份', // Default
-        macros: item.macros
-      }));
-      setAnalyzedItems(editableItems);
-    } catch (err) {
-      alert("影像解析失敗，請重試。");
-      setScannedImages([]);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleUpdateAnalyzedItem = (idx: number, field: string, value: any) => {
-     setAnalyzedItems(prev => prev.map((item, i) => {
-        if (i !== idx) return item;
-        if (field === 'name') return { ...item, name: value };
-        // For macros, deep update
-        if (['calories', 'protein', 'carbs', 'fat'].includes(field)) {
-           return { ...item, macros: { ...item.macros, [field]: parseFloat(value) || 0 } };
-        }
-        return item;
-     }));
-  };
-
-  const commitAnalyzedItems = () => {
-    if (analyzedItems.length === 0) return;
-    
-    const newMeals: MealRecord[] = analyzedItems.map(item => ({
-      id: `ai_${Date.now()}_${Math.random()}`,
-      name: item.name,
+  const handleQuickAddMacros = () => {
+    if (!quickMealName.trim()) { alert("請輸入補給名稱"); return; }
+    const newMeal: MealRecord = {
+      id: `q_${Date.now()}`,
+      name: quickMealName.trim(),
       timestamp: new Date().toISOString(),
       servings: 1,
-      portionLabel: `1 份 (AI預估)`,
-      macros: item.macros
-    }));
-
-    const updatedLog: DietLog = {
-      ...currentLog,
-      meals: { ...currentLog.meals, [activeMealType]: [...(currentLog.meals[activeMealType] || []), ...newMeals] }
+      macros: quickMacros
     };
+    const updatedLog: DietLog = { ...currentLog, meals: { ...currentLog.meals, [activeMealType]: [...(currentLog.meals[activeMealType] || []), newMeal] } };
     onUpdateDietLog(updatedLog);
     setShowEntryModal(false);
-    resetEntryForm();
+    setQuickMealName('');
   };
 
-  // --- Commit Single Meal ---
-  const commitSingleMeal = () => {
-    if (!inputName || currentMacros.calories === 0) {
-      alert("請輸入名稱與熱量數據");
-      return;
-    }
-    
+  const handleAddFromDB = (food: FoodItem) => {
     const newMeal: MealRecord = {
-      id: Date.now().toString(),
-      name: inputName,
+      id: `db_${Date.now()}`,
+      name: food.name,
       timestamp: new Date().toISOString(),
-      servings: parseFloat(inputQuantity),
-      portionLabel: `${inputQuantity} ${inputUnit === 'serving' ? '份' : inputUnit}`,
-      macros: currentMacros
+      servings: 1,
+      portionLabel: food.unit,
+      macros: food.macros
     };
-
-    const updatedLog: DietLog = {
-      ...currentLog,
-      meals: { ...currentLog.meals, [activeMealType]: [...(currentLog.meals[activeMealType] || []), newMeal] }
-    };
+    const updatedLog: DietLog = { ...currentLog, meals: { ...currentLog.meals, [activeMealType]: [...(currentLog.meals[activeMealType] || []), newMeal] } };
     onUpdateDietLog(updatedLog);
     setShowEntryModal(false);
-    resetEntryForm();
   };
 
-  const filteredFoods = useMemo(() => {
-    if (!searchQuery) return [];
-    return localFoodDb.filter(f => f.name.includes(searchQuery)).slice(0, 6);
-  }, [searchQuery, localFoodDb]);
+  const handleQuickMacroChange = (field: keyof MacroNutrients, value: string | number) => {
+    let num = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(num)) num = 0;
+    setQuickMacros(prev => ({ ...prev, [field]: num }));
+  };
 
   const mealCategories = [
-    { id: 'breakfast', label: '早餐 Breakfast', icon: <Coffee size={20}/> },
-    { id: 'lunch', label: '午餐 Lunch', icon: <Sun size={20}/> },
-    { id: 'dinner', label: '晚餐 Dinner', icon: <Utensils size={20}/> },
-    { id: 'snack', label: '點心 Snack', icon: <Sandwich size={20} className="opacity-60" /> },
-    { id: 'nightSnack', label: '宵夜 Late Night', icon: <Moon size={20}/> }
+    { id: 'breakfast', label: '早餐', en: 'Breakfast', icon: <Clock size={16}/> },
+    { id: 'lunch', label: '午餐', en: 'Lunch', icon: <Activity size={16}/> },
+    { id: 'dinner', label: '晚餐', en: 'Dinner', icon: <Utensils size={16}/> },
+    { id: 'snack', label: '點心/其他', en: 'Snack', icon: <History size={16}/> },
+    { id: 'nightSnack', label: '宵夜', en: 'Late Night', icon: <Flame size={16}/> }
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-40 px-4 animate-in fade-in duration-500">
+    <div className="max-w-4xl mx-auto space-y-6 pb-40 px-4 animate-in fade-in duration-500">
       
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between border-b-2 border-black pb-6 gap-6">
+      {/* 頂部標題與日期控制 */}
+      <header className="flex flex-col md:flex-row md:items-end justify-between border-b border-zinc-100 pb-6 gap-4">
         <div>
-          <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-[0.3em] mb-1">Nutrition Protocol</p>
-          <h2 className="text-4xl md:text-5xl font-black text-black tracking-tighter uppercase leading-none">飲食控制</h2>
+          <p className="text-[10px] font-mono font-black text-zinc-300 uppercase tracking-[0.4em] mb-1">Tactical_Nutrition_Matrix</p>
+          <h2 className="text-3xl font-black text-black tracking-tighter uppercase leading-none">飲食控制中心</h2>
         </div>
-        <div className="flex gap-2 bg-gray-50 p-1 rounded-sm border border-gray-200">
-           <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]); }} className="p-3 bg-white border border-gray-200 hover:border-black transition-all text-gray-500 hover:text-black"><ChevronLeft size={16}/></button>
-           <div className="px-8 py-3 flex flex-col items-center justify-center font-bold text-lg font-mono text-black">
-              {selectedDate}
-           </div>
-           <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]); }} className="p-3 bg-white border border-gray-200 hover:border-black transition-all text-gray-500 hover:text-black"><ChevronRight size={16}/></button>
+        <div className="flex gap-1 bg-white p-1 border border-zinc-100 shadow-sm rounded-sm self-start md:self-auto">
+           <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d.toISOString().split('T')[0]); }} className="p-2 hover:bg-zinc-50 text-zinc-400 hover:text-black transition-all"><ChevronLeft size={18}/></button>
+           <div className="px-4 py-2 flex items-center justify-center font-black text-sm font-mono text-black border-x border-zinc-50">{selectedDate}</div>
+           <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d.toISOString().split('T')[0]); }} className="p-2 hover:bg-zinc-50 text-zinc-400 hover:text-black transition-all"><ChevronRight size={18}/></button>
         </div>
       </header>
 
-      {/* Dashboard & Totals */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white border-2 border-black p-8 rounded-sm relative overflow-hidden group shadow-sm">
-           <div className="flex justify-between items-start mb-8 relative z-10">
-              <div className="space-y-1">
-                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Calorie_Balance</p>
-                 <h3 className="text-xl font-black text-black uppercase tracking-tight">剩餘額度</h3>
-              </div>
-              <div className="flex gap-3">
-                 <div className="px-3 py-1 bg-gray-100 border border-gray-200 flex items-center gap-2 text-[10px] font-bold uppercase text-gray-500">
-                    <Flame size={12} className="text-orange-500"/> Burn: {burnedCalories}
-                 </div>
-                 <div className="px-3 py-1 bg-black text-white border border-black flex items-center gap-2 text-[10px] font-bold uppercase">
-                    <Utensils size={12} className="text-[#bef264]"/> Eat: {totals.calories}
-                 </div>
-              </div>
+      {/* 核心熱量儀表板 - 修正溢出與響應式 */}
+      <div className="bg-[#0f0f12] text-white p-6 md:p-10 relative overflow-hidden rounded-sm border border-zinc-800 shadow-2xl">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-[#bef264] blur-[150px] opacity-[0.03]"></div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 relative z-10 gap-4">
+           <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#bef264]">Operational_Energy_Balance</p>
+              <h3 className="text-lg font-black text-white uppercase tracking-tight">剩餘熱量額度</h3>
            </div>
-           <div className="flex items-baseline gap-2 relative z-10">
-              <span className={`text-7xl md:text-8xl font-black tracking-tighter ${remainingCal < 0 ? 'text-red-500' : 'text-black'}`}>{remainingCal}</span>
-              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">kcal left</span>
-           </div>
-           <div className="mt-8 space-y-2 relative z-10">
-              <div className="h-3 w-full bg-gray-100 rounded-sm overflow-hidden border border-gray-100">
-                 <div className={`h-full ${remainingCal < 0 ? 'bg-red-500' : 'bg-[#bef264]'} transition-all duration-1000`} style={{ width: `${Math.min(100, (totals.calories / targetCal) * 100)}%` }}></div>
-              </div>
+           <div className="text-left md:text-right">
+              <p className="text-5xl md:text-6xl font-black font-mono tracking-tighter text-[#bef264] leading-none">
+                {remainingCal}
+                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest ml-3 align-bottom">KCAL_REMAINING</span>
+              </p>
            </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-4 md:gap-8 relative z-10 border-t border-white/5 pt-6">
+           <div>
+              <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">預設目標 <span className="text-[8px] opacity-30">Goal</span></p>
+              <p className="text-lg md:text-xl font-black font-mono text-white">{targetCal}</p>
+           </div>
+           <div>
+              <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">今日攝取 <span className="text-[8px] opacity-30">Intake</span></p>
+              <p className="text-lg md:text-xl font-black font-mono text-white/40">{totals.calories}</p>
+           </div>
+           <div>
+              <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">活動消耗 <span className="text-[8px] opacity-30">Burn</span></p>
+              <p className="text-lg md:text-xl font-black font-mono text-[#bef264]">+{burnedCalories}</p>
+           </div>
+        </div>
+
+        <div className="mt-8 h-1 w-full bg-white/5 rounded-full overflow-hidden relative z-10">
+           <div className={`h-full ${remainingCal < 0 ? 'bg-red-500' : 'bg-[#bef264]'} transition-all duration-1000 shadow-[0_0_10px_currentColor]`} style={{ width: `${Math.min(100, (totals.calories / (targetCal + burnedCalories)) * 100)}%` }}></div>
+        </div>
+      </div>
+
+      {/* 宏量營養分析報告 - 移至熱量儀表板下方 */}
+      <div className="bg-white border border-zinc-100 p-6 md:p-8 shadow-sm rounded-sm">
+        <h3 className="text-[11px] font-black uppercase tracking-widest mb-6 flex items-center gap-2 border-b border-zinc-50 pb-4 text-zinc-400">
+           <LayoutGrid size={16} /> 宏量營養分析 <span className="text-[9px] opacity-50 ml-1">MACRO_REPORTS</span>
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-10">
            {[
-             { label: 'Protein 蛋白質', val: totals.protein, target: profile.macroTargets?.protein || 150, bar: 'bg-black' },
-             { label: 'Carbs 碳水化合物', val: totals.carbs, target: profile.macroTargets?.carbs || 200, bar: 'bg-blue-500' },
-             { label: 'Fat 脂肪', val: totals.fat, target: profile.macroTargets?.fat || 70, bar: 'bg-orange-400' }
-           ].map((macro, idx) => (
-              <div key={idx} className="bg-white border border-gray-200 p-5 rounded-sm flex flex-col justify-between shadow-sm hover:border-black transition-all h-[110px]">
-                 <div className="flex justify-between items-start">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">{macro.label}</p>
-                    <span className="text-[10px] font-black text-gray-300">{Math.round((macro.val / macro.target) * 100)}%</span>
+             { l: '蛋白質', en: 'Protein', v: totals.protein, t: profile.macroTargets?.protein || 150, b: 'bg-black' },
+             { l: '碳水化合物', en: 'Carbs', v: totals.carbs, t: profile.macroTargets?.carbs || 200, b: 'bg-blue-500' },
+             { l: '脂肪', en: 'Fat', v: totals.fat, t: profile.macroTargets?.fat || 70, b: 'bg-orange-400' }
+           ].map((macro, i) => (
+              <div key={i} className="space-y-3">
+                 <div className="flex justify-between items-end">
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{macro.l} <span className="text-[8px] opacity-40 ml-1">{macro.en}</span></span>
+                    <span className="font-mono font-black text-base">{Math.round(macro.v)}<span className="text-[9px] text-zinc-300 ml-1">/ {macro.t}g</span></span>
                  </div>
-                 <div>
-                    <div className="flex items-baseline gap-1 mb-2">
-                       <span className="text-2xl font-black text-black">{Math.round(macro.val)}</span>
-                       <span className="text-[10px] font-bold text-gray-400">/ {macro.target}g</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                       <div className={`h-full ${macro.bar} transition-all duration-1000`} style={{ width: `${Math.min(100, (macro.val / macro.target) * 100)}%` }}></div>
-                    </div>
+                 <div className="h-1 w-full bg-zinc-50 rounded-full overflow-hidden">
+                    <div className={`h-full ${macro.b} transition-all duration-1000 shadow-[0_0_5px_currentColor]`} style={{ width: `${Math.min(100, (macro.v/macro.t)*100)}%` }}></div>
                  </div>
               </div>
            ))}
         </div>
       </div>
 
-      {/* Meal List */}
-      <div className="space-y-4 pt-4">
-         {mealCategories.map(cat => {
-            const meals = currentLog.meals[cat.id as keyof DietLog['meals']] || [];
-            const catCals = meals.reduce((s, m) => s + m.macros.calories, 0);
-            return (
-               <div key={cat.id} className="bg-white border border-gray-200 rounded-sm overflow-hidden hover:border-gray-400 transition-all shadow-sm">
-                  <div className="p-6 md:p-8 flex items-center justify-between">
-                     <div className="flex items-center gap-6">
-                        <div className="w-12 h-12 bg-gray-50 border border-gray-100 rounded-sm flex items-center justify-center text-gray-600">
-                           {cat.icon}
-                        </div>
-                        <div>
-                           <h3 className="text-xl font-bold text-black tracking-tight uppercase">{cat.label}</h3>
-                           <p className="text-sm font-bold text-gray-400 mt-0.5 tracking-wide font-mono">{catCals} KCAL</p>
-                        </div>
-                     </div>
-                     <button 
-                        onClick={() => { setActiveMealType(cat.id as any); setShowEntryModal(true); resetEntryForm(); }}
-                        className="w-12 h-12 bg-black text-white rounded-sm flex items-center justify-center hover:bg-[#bef264] hover:text-black transition-all shadow-lg active:scale-95"
-                     >
-                        <Plus size={24} />
-                     </button>
-                  </div>
-                  {meals.length > 0 && (
-                     <div className="border-t border-gray-100 bg-gray-50/50 px-6 py-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {meals.map((meal) => (
-                           <div key={meal.id} className="bg-white border border-gray-200 p-3 rounded-sm flex justify-between items-center group hover:border-black transition-all">
-                              <div className="overflow-hidden">
-                                 <p className="font-bold text-sm text-black truncate">{meal.name}</p>
-                                 <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 tracking-wide">
-                                    {meal.portionLabel || `${meal.servings} 份`} • P:{meal.macros.protein} C:{meal.macros.carbs} F:{meal.macros.fat}
-                                 </p>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                 <span className="font-mono font-black text-xs text-black">{meal.macros.calories}</span>
-                                 <button onClick={() => {
-                                    const updatedLog = { ...currentLog, meals: { ...currentLog.meals, [cat.id]: meals.filter(m => m.id !== meal.id) } };
-                                    onUpdateDietLog(updatedLog);
-                                 }} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
-                              </div>
-                           </div>
-                        ))}
-                     </div>
-                  )}
-               </div>
-            );
-         })}
+      {/* 飲食分類卡片清單 (紀錄整合於此) */}
+      <div className="space-y-4">
+        {mealCategories.map(cat => {
+           const meals = (currentLog.meals[cat.id as keyof DietLog['meals']] || []) as MealRecord[];
+           const categoryTotal = meals.reduce((s, m) => s + m.macros.calories, 0);
+           return (
+              <div key={cat.id} className="bg-white border border-zinc-100 overflow-hidden group hover:border-black transition-all rounded-sm shadow-sm">
+                 <div className="p-4 md:p-5 flex items-center justify-between border-b border-zinc-50 bg-zinc-50/20">
+                    <div className="flex items-center gap-4">
+                       <div className="w-10 h-10 bg-white border border-zinc-100 text-zinc-300 flex items-center justify-center group-hover:bg-black group-hover:text-[#bef264] transition-all rounded-sm">{cat.icon}</div>
+                       <div>
+                          <h4 className="text-sm font-black uppercase tracking-widest text-black">{cat.label} <span className="text-[9px] text-zinc-300 font-bold ml-1">{cat.en}</span></h4>
+                          <p className="text-[10px] font-mono font-bold text-zinc-400">{categoryTotal} KCAL</p>
+                       </div>
+                    </div>
+                    <button 
+                       onClick={() => { setActiveMealType(cat.id as any); setShowEntryModal(true); setEntryTab('QUICK'); }} 
+                       className="p-2 md:px-4 md:py-2 bg-white border border-zinc-200 text-black text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-[#bef264] hover:border-black transition-all rounded-sm shadow-sm active:scale-95"
+                    >
+                       <span className="hidden md:inline">新增紀錄</span>
+                       <Plus size={16} className="md:hidden" />
+                    </button>
+                 </div>
+                 
+                 {/* 分類內的飲食紀錄清單 */}
+                 <div className="divide-y divide-zinc-50">
+                    {meals.length > 0 ? (
+                       meals.map((m: MealRecord) => (
+                          <div key={m.id} className="p-4 pl-14 md:pl-16 flex justify-between items-center hover:bg-zinc-50/50 group/item">
+                             <div className="overflow-hidden">
+                                <p className="text-sm font-bold text-black truncate">{m.name}</p>
+                                <p className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest">P:{m.macros.protein} C:{m.macros.carbs} F:{m.macros.fat}</p>
+                             </div>
+                             <div className="flex items-center gap-4">
+                                <span className="text-sm font-black font-mono">{m.macros.calories}K</span>
+                                <button 
+                                   onClick={() => {
+                                      const updatedLog = { ...currentLog, meals: { ...currentLog.meals, [cat.id]: meals.filter(x => x.id !== m.id) } };
+                                      onUpdateDietLog(updatedLog);
+                                   }}
+                                   className="text-zinc-200 hover:text-red-500 transition-colors opacity-100 md:opacity-0 group-hover/item:opacity-100"
+                                >
+                                   <Trash2 size={14} />
+                                </button>
+                             </div>
+                          </div>
+                       ))
+                    ) : (
+                       <div className="p-8 text-center text-[10px] font-black text-zinc-200 uppercase tracking-[0.2em] italic">暫無補給數據 NO_DATA_DETECTED</div>
+                    )}
+                 </div>
+              </div>
+           );
+        })}
       </div>
 
-      {/* ENTRY MODAL */}
+      {/* 核心登錄視窗 (Sleek Terminal Modal) */}
       {showEntryModal && (
-         <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-md flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-2xl border-2 border-black rounded-sm shadow-2xl flex flex-col h-[90vh] overflow-hidden">
+         <div className="fixed inset-0 z-[100] bg-white/95 backdrop-blur-xl flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-300">
+            <div className="w-full max-w-xl bg-white border border-zinc-100 shadow-[0_40px_120px_rgba(0,0,0,0.15)] flex flex-col h-[85vh] overflow-hidden rounded-sm">
                
-               <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50">
+               {/* 視窗頂部 */}
+               <div className="flex justify-between items-center p-6 md:p-8 bg-[#0f0f12] text-white">
                   <div>
-                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-1">DATA ENTRY</p>
-                     <h3 className="text-2xl font-black text-black uppercase tracking-tight">{activeMealType}</h3>
+                     <p className="text-[9px] font-black uppercase tracking-[0.4em] text-zinc-500 mb-1">Session_Input_Stream</p>
+                     <h3 className="text-xl font-black uppercase tracking-widest flex items-center gap-3">登錄項目: <span className="text-[#bef264]">{activeMealType}</span></h3>
                   </div>
-                  <button onClick={() => setShowEntryModal(false)} className="text-gray-400 hover:text-black transition-colors"><X size={28}/></button>
+                  <button onClick={() => setShowEntryModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-[#bef264] hover:text-black transition-all rounded-full"><X size={24}/></button>
                </div>
 
-               <div className="flex border-b border-gray-100">
-                  <button onClick={() => setEntryTab('MANUAL')} className={`flex-1 py-4 text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${entryTab === 'MANUAL' ? 'bg-black text-[#bef264]' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
-                     <PenTool size={14}/> 手動/搜尋
-                  </button>
-                  <button onClick={() => setEntryTab('CAMERA')} className={`flex-1 py-4 text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${entryTab === 'CAMERA' ? 'bg-black text-[#bef264]' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
-                     <Camera size={14}/> AI 多圖辨識
-                  </button>
-                  <button onClick={() => setEntryTab('AI_ADVISOR')} className={`flex-1 py-4 text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${entryTab === 'AI_ADVISOR' ? 'bg-black text-[#bef264]' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
-                     <ChefHat size={14}/> AI 膳食顧問
-                  </button>
+               {/* 分頁選擇 */}
+               <div className="flex bg-zinc-50 border-b border-zinc-100">
+                  <button onClick={() => setEntryTab('QUICK')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${entryTab === 'QUICK' ? 'bg-white text-black shadow-inner' : 'text-zinc-400'}`}>快速錄入</button>
+                  <button onClick={() => setEntryTab('SEARCH')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all border-x border-zinc-100 ${entryTab === 'SEARCH' ? 'bg-white text-black shadow-inner' : 'text-zinc-400'}`}>資料庫搜尋</button>
+                  <button onClick={() => setEntryTab('AI')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${entryTab === 'AI' ? 'bg-white text-black shadow-inner' : 'text-zinc-400'}`}>AI 辨識</button>
                </div>
 
-               <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar relative bg-[#fcfcfc]">
-                  
-                  {/* === MANUAL / SEARCH MODE === */}
-                  {entryTab === 'MANUAL' && (
-                     <div className="space-y-8">
-                        {/* Search & Add New Toolbar */}
-                        <div className="flex gap-2 relative z-20">
-                           <div className="relative group flex-1">
-                              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                              <input 
-                                 value={searchQuery}
-                                 onChange={e => { setSearchQuery(e.target.value); setIsCreatingFood(false); }}
-                                 placeholder="搜尋資料庫 (雞胸肉, 蛋...)" 
-                                 className="w-full bg-white border border-gray-200 p-4 pl-12 font-bold text-black rounded-sm focus:border-black outline-none transition-all placeholder:text-gray-300 shadow-sm" 
-                              />
-                              {searchQuery && filteredFoods.length > 0 && !isCreatingFood && (
-                                 <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-black rounded-sm shadow-2xl overflow-hidden z-30 max-h-60 overflow-y-auto custom-scrollbar">
-                                    {filteredFoods.map(f => (
-                                       <button key={f.id} onClick={() => handleSelectFood(f)} className="w-full text-left p-4 hover:bg-[#bef264] hover:text-black border-b border-gray-100 last:border-0 transition-colors flex justify-between items-center group">
-                                          <div>
-                                             <span className="font-bold block">{f.name}</span>
-                                             <span className="text-[10px] font-mono text-gray-400 group-hover:text-black">單位: {f.unit}</span>
-                                          </div>
-                                          <span className="text-xs font-mono font-black">{f.macros.calories} kcal</span>
-                                       </button>
-                                    ))}
-                                 </div>
-                              )}
-                           </div>
-                           <button 
-                              onClick={() => { setIsCreatingFood(!isCreatingFood); setSearchQuery(''); setSelectedFoodBase(null); }}
-                              className={`w-14 flex items-center justify-center border transition-all ${isCreatingFood ? 'bg-black text-[#bef264] border-black' : 'bg-white text-gray-400 border-gray-200 hover:border-black hover:text-black'}`}
-                           >
-                              <Plus size={24} className={isCreatingFood ? "rotate-45 transition-transform" : "transition-transform"} />
-                           </button>
+               {/* 內容區域 */}
+               <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar bg-[#fafafa]">
+                  {entryTab === 'QUICK' && (
+                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">補給名稱 <span className="text-[8px] opacity-50">ITEM_NAME</span></label>
+                           <input 
+                              autoFocus
+                              value={quickMealName}
+                              onChange={e => setQuickMealName(e.target.value)}
+                              placeholder="例如：雞胸肉沙拉、高蛋白飲..."
+                              className="w-full bg-white border border-zinc-200 p-4 text-xl font-black outline-none focus:border-black transition-all rounded-sm shadow-sm"
+                           />
                         </div>
 
-                        {/* Create New Food Form */}
-                        {isCreatingFood && (
-                           <div className="bg-gray-50 p-6 border-2 border-gray-200 border-dashed rounded-sm animate-in slide-in-from-top-4 space-y-4">
-                              <h4 className="font-black uppercase text-xs tracking-widest text-gray-500">定義新食物資料庫 (NEW DATABASE ENTRY)</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase text-gray-400">名稱 Name</label>
-                                    <input value={newFoodData.name} onChange={e => setNewFoodData({...newFoodData, name: e.target.value})} className="w-full p-2 border border-gray-200 font-bold outline-none focus:border-black" placeholder="例: 自製燕麥粥" />
-                                 </div>
-                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase text-gray-400">單位標籤 Unit Label</label>
-                                    <input value={newFoodData.unitLabel} onChange={e => setNewFoodData({...newFoodData, unitLabel: e.target.value})} className="w-full p-2 border border-gray-200 font-bold outline-none focus:border-black" placeholder="例: 1碗 (300g)" />
-                                 </div>
-                              </div>
-                              <div className="grid grid-cols-4 gap-2">
-                                 {['calories','protein','carbs','fat'].map(k => (
-                                    <div key={k} className="space-y-1">
-                                       <label className="text-[9px] font-bold uppercase text-gray-400 truncate">{k === 'calories' ? 'kcal' : k}</label>
-                                       <input type="number" value={(newFoodData as any)[k]} onChange={e => setNewFoodData({...newFoodData, [k]: e.target.value})} className="w-full p-2 border border-gray-200 font-mono font-bold outline-none focus:border-black text-center" />
+                        <div className="bg-white border border-zinc-200 p-6 md:p-8 rounded-sm space-y-8 shadow-sm">
+                           <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-widest border-b border-zinc-50 pb-4">數值精確校準 MACRO_SYNC</h4>
+                           
+                           <div className="space-y-8">
+                              {[
+                                { f: 'calories', l: '熱量', en: 'Energy', unit: 'KCAL', max: 2000, step: 5, acc: 'accent-black' },
+                                { f: 'protein', l: '蛋白質', en: 'Protein', unit: 'G', max: 150, step: 1, acc: 'accent-orange-500' },
+                                { f: 'carbs', l: '碳水', en: 'Carbs', unit: 'G', max: 300, step: 1, acc: 'accent-blue-500' },
+                                { f: 'fat', l: '脂肪', en: 'Fat', unit: 'G', max: 100, step: 1, acc: 'accent-yellow-500' }
+                              ].map((macro) => (
+                                 <div key={macro.f} className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{macro.l} <span className="text-[8px] opacity-30 ml-1">{macro.en}</span></label>
+                                       <div className="flex items-center gap-2 bg-zinc-50 px-3 py-1.5 border border-zinc-100 rounded-sm">
+                                          <input 
+                                             type="number" 
+                                             value={quickMacros[macro.f as keyof MacroNutrients]} 
+                                             onChange={e => handleQuickMacroChange(macro.f as any, e.target.value)}
+                                             className="w-14 bg-transparent text-right font-mono font-black text-lg outline-none"
+                                          />
+                                          <span className="text-[10px] font-black text-zinc-300">{macro.unit}</span>
+                                       </div>
                                     </div>
-                                 ))}
-                              </div>
-                              <button onClick={handleCreateFood} className="w-full bg-black text-white py-3 font-black text-xs uppercase hover:bg-[#bef264] hover:text-black transition-all">
-                                 保存並選用
-                              </button>
-                           </div>
-                        )}
-
-                        {/* Edit Selected / Input Form */}
-                        {!isCreatingFood && (
-                           <div className="space-y-8 animate-in fade-in duration-300">
-                              <div className="space-y-2">
-                                 <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">品項名稱 ITEM</label>
-                                 <input 
-                                    value={inputName} 
-                                    onChange={e => setInputName(e.target.value)}
-                                    placeholder="輸入名稱或從上方搜尋..."
-                                    className="w-full border-b-2 border-gray-200 py-2 font-black text-3xl text-black outline-none focus:border-black transition-all bg-transparent placeholder:text-gray-200"
-                                 />
-                              </div>
-
-                              {/* Portion Calculator */}
-                              <div className="bg-gray-100 p-6 rounded-sm space-y-4 border border-gray-200">
-                                 <div className="flex items-center gap-2 mb-2">
-                                    <Scale size={14} className="text-black" />
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest">攝取份量 PORTION</label>
-                                 </div>
-                                 <div className="flex gap-4 items-stretch h-14">
                                     <input 
-                                       type="number" 
-                                       step="0.1"
-                                       value={inputQuantity}
-                                       onChange={e => setInputQuantity(e.target.value)}
-                                       className="flex-1 min-w-0 bg-white border-2 border-transparent focus:border-black rounded-sm p-3 font-mono font-black text-3xl text-center outline-none"
+                                       type="range" min="0" max={macro.max} step={macro.step} 
+                                       value={quickMacros[macro.f as keyof MacroNutrients]} 
+                                       onChange={e => handleQuickMacroChange(macro.f as any, e.target.value)} 
+                                       className={`w-full h-1 bg-zinc-100 rounded-full appearance-none cursor-pointer ${macro.acc}`} 
                                     />
-                                    <div className="flex-1 min-w-0 grid grid-cols-3 gap-1 bg-gray-200 p-1 rounded-sm">
-                                       {['serving', 'g', 'ml'].map((u) => (
-                                          <button 
-                                             key={u}
-                                             onClick={() => setInputUnit(u as any)}
-                                             className={`text-[10px] font-black uppercase rounded-sm transition-all truncate ${inputUnit === u ? 'bg-black text-[#bef264] shadow-md' : 'text-gray-500 hover:text-black'}`}
-                                          >
-                                             {u === 'serving' ? '份' : u}
-                                          </button>
-                                       ))}
-                                    </div>
                                  </div>
-                                 <p className="text-[9px] font-bold text-gray-400 text-center uppercase tracking-widest">
-                                    {selectedFoodBase ? `Base: ${selectedFoodBase.unit} | Auto-Scaling Active` : 'Manual Mode'}
-                                 </p>
-                              </div>
+                              ))}
+                           </div>
 
-                              {/* Macros Display */}
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase text-gray-400">熱量 Kcal</label>
-                                    <input type="number" value={currentMacros.calories} onChange={e => handleManualMacroChange('calories', e.target.value)} className="w-full border border-gray-200 rounded-sm p-3 font-mono font-black text-xl outline-none focus:border-black text-center" />
-                                 </div>
-                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase text-gray-400">蛋白 Protein</label>
-                                    <input type="number" value={currentMacros.protein} onChange={e => handleManualMacroChange('protein', e.target.value)} className="w-full border border-gray-200 rounded-sm p-3 font-mono font-black text-xl outline-none focus:border-black text-center" />
-                                 </div>
-                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase text-gray-400">碳水 Carbs</label>
-                                    <input type="number" value={currentMacros.carbs} onChange={e => handleManualMacroChange('carbs', e.target.value)} className="w-full border border-gray-200 rounded-sm p-3 font-mono font-black text-xl outline-none focus:border-black text-center" />
-                                 </div>
-                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase text-gray-400">脂肪 Fat</label>
-                                    <input type="number" value={currentMacros.fat} onChange={e => handleManualMacroChange('fat', e.target.value)} className="w-full border border-gray-200 rounded-sm p-3 font-mono font-black text-xl outline-none focus:border-black text-center" />
-                                 </div>
-                              </div>
+                           <button onClick={handleQuickAddMacros} className="w-full bg-black text-[#bef264] py-5 font-black uppercase tracking-[0.4em] text-xs hover:bg-[#bef264] hover:text-black transition-all shadow-xl flex items-center justify-center gap-3 rounded-sm active:scale-95">
+                              <Save size={18} /> 封存數據 COMMIT_DATA
+                           </button>
+                        </div>
+                     </div>
+                  )}
+
+                  {entryTab === 'SEARCH' && (
+                     <div className="space-y-8 animate-in fade-in">
+                        <div className="relative">
+                           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-300" size={20}/>
+                           <input 
+                              autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                              placeholder="搜尋預設補給庫..." 
+                              className="w-full bg-white border border-zinc-200 p-4 pl-16 text-lg font-black outline-none focus:border-black transition-all rounded-sm shadow-sm" 
+                           />
+                        </div>
+                        {searchQuery && (
+                           <div className="space-y-1">
+                              {FOOD_DATABASE.filter(f => f.name.includes(searchQuery)).slice(0, 8).map(f => (
+                                 <button key={f.id} onClick={() => handleAddFromDB(f)} className="w-full text-left p-5 bg-white border border-zinc-50 hover:border-black transition-all flex justify-between items-center group rounded-sm shadow-sm">
+                                    <div><p className="font-black text-base">{f.name}</p><p className="text-[9px] font-mono text-zinc-400 uppercase">{f.unit}</p></div>
+                                    <div className="flex items-center gap-6"><span className="font-mono font-black text-lg">{f.macros.calories}K</span><Plus size={16} className="text-zinc-200 group-hover:text-black"/></div>
+                                 </button>
+                              ))}
                            </div>
                         )}
                      </div>
                   )}
 
-                  {/* === AI CAMERA MODE === */}
-                  {entryTab === 'CAMERA' && (
+                  {entryTab === 'AI' && (
                      <div className="h-full flex flex-col">
                         {isAnalyzing ? (
-                           <div className="py-20">
-                              <TacticalLoader type="DIET" title="正在同步解析多重影像光譜" />
-                           </div>
-                        ) : analyzedItems.length > 0 ? (
-                           // Analysis Results
-                           <div className="space-y-6">
-                              <div className="flex justify-between items-center">
-                                 <h3 className="font-black uppercase text-lg">AI 辨識結果 ({analyzedItems.length})</h3>
-                                 <button onClick={() => { setAnalyzedItems([]); setScannedImages([]); }} className="text-xs font-bold text-red-500 hover:underline">重設</button>
-                              </div>
-                              <div className="space-y-4">
-                                 {analyzedItems.map((item, idx) => (
-                                    <div key={idx} className="bg-white border-2 border-gray-100 p-4 rounded-sm hover:border-black transition-all group">
-                                       <div className="flex justify-between items-start mb-3">
-                                          <input 
-                                             value={item.name} 
-                                             onChange={e => handleUpdateAnalyzedItem(idx, 'name', e.target.value)}
-                                             className="font-black text-lg border-b border-transparent focus:border-black outline-none bg-transparent w-full"
-                                          />
-                                          <button onClick={() => setAnalyzedItems(prev => prev.filter((_, i) => i !== idx))}><X size={16} className="text-gray-300 hover:text-red-500"/></button>
-                                       </div>
-                                       <div className="grid grid-cols-4 gap-2 text-center">
-                                          {['calories','protein','carbs','fat'].map(k => (
-                                             <div key={k} className="bg-gray-50 p-2 rounded-sm">
-                                                <p className="text-[8px] font-black uppercase text-gray-400">{k.substring(0,3)}</p>
-                                                <input 
-                                                   type="number" 
-                                                   value={item.macros[k]} 
-                                                   onChange={e => handleUpdateAnalyzedItem(idx, k, e.target.value)}
-                                                   className="w-full bg-transparent font-mono font-bold text-center outline-none text-sm"
-                                                />
-                                             </div>
-                                          ))}
-                                       </div>
-                                    </div>
-                                 ))}
-                              </div>
-                              <button onClick={commitAnalyzedItems} className="w-full bg-[#bef264] text-black py-4 font-black uppercase text-xs tracking-widest hover:bg-black hover:text-white transition-all shadow-xl">
-                                 確認匯入全選項目
-                              </button>
-                           </div>
+                           <TacticalLoader type="DIET" title="正在進行多重光譜辨識" />
                         ) : (
-                           // Upload Interface
-                           <div className="h-full flex flex-col items-center justify-center space-y-8">
-                              <div 
-                                 onClick={() => fileInputRef.current?.click()}
-                                 className="w-full max-w-sm aspect-video border-2 border-dashed border-gray-300 rounded-sm flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-black hover:bg-gray-50 transition-all group"
-                              >
-                                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-black group-hover:text-white transition-all">
-                                    <Camera size={32} />
-                                 </div>
-                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">點擊上傳 (最多 5 張)</p>
+                           <div className="h-full flex flex-col items-center justify-center py-12 space-y-10">
+                              <div onClick={() => fileInputRef.current?.click()} className="w-64 h-64 border-2 border-dashed border-zinc-100 hover:border-black hover:bg-white transition-all flex flex-col items-center justify-center gap-4 cursor-pointer group rounded-sm">
+                                 <div className="w-16 h-16 bg-black text-[#bef264] rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform"><Camera size={32} /></div>
+                                 <p className="text-[9px] font-black text-zinc-400 uppercase tracking-[0.2em] text-center px-6">上傳補給單位影像<br/>(AI 將自動估算數據)</p>
                               </div>
-                              <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} className="hidden" accept="image/*" multiple />
-                              
-                              {scannedImages.length > 0 && (
-                                 <div className="flex gap-2 overflow-x-auto w-full px-4 h-20">
-                                    {scannedImages.map((src, i) => (
-                                       <img key={i} src={src} className="h-full w-auto border border-gray-200 rounded-sm object-cover" />
-                                    ))}
-                                 </div>
-                              )}
-                              
-                              <p className="text-[10px] text-gray-400 font-bold max-w-xs text-center leading-relaxed">
-                                 AI 將自動掃描所有照片，並列出所有辨識到的食物清單供您確認。
-                              </p>
-                           </div>
-                        )}
-                     </div>
-                  )}
-
-                  {/* === AI ADVISOR MODE === */}
-                  {entryTab === 'AI_ADVISOR' && (
-                     <div className="h-full flex flex-col space-y-6">
-                        {/* Preferences Inputs */}
-                        <div className="space-y-4">
-                           <div className="bg-gradient-to-r from-gray-50 to-white p-6 border border-gray-100 rounded-sm space-y-4 shadow-sm relative overflow-hidden">
-                              <div className="absolute top-0 right-0 p-3 opacity-10"><ChefHat size={64} className="text-black"/></div>
-                              
-                              <div className="space-y-2 relative z-10">
-                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Sparkles size={12} className="text-orange-400"/> 
-                                    現在超想吃什麼 (Craving)
-                                 </label>
-                                 <input 
-                                    value={cravings}
-                                    onChange={e => setCravings(e.target.value)}
-                                    placeholder="例如：鹹酥雞、甜點、很油的東西..."
-                                    className="w-full bg-white border border-gray-200 p-3 font-bold text-sm outline-none focus:border-black rounded-sm shadow-sm"
-                                 />
-                              </div>
-
-                              <div className="space-y-2 relative z-10">
-                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Activity size={12} className="text-green-500"/>
-                                    健康關注點 (Health Focus)
-                                 </label>
-                                 <input 
-                                    value={healthFocus}
-                                    onChange={e => setHealthFocus(e.target.value)}
-                                    placeholder="例如：降血脂、控制血糖、少納..."
-                                    className="w-full bg-white border border-gray-200 p-3 font-bold text-sm outline-none focus:border-black rounded-sm shadow-sm"
-                                 />
-                              </div>
-                              <p className="text-[9px] font-bold text-gray-400 text-right mt-2">
-                                 * 您的偏好將被自動儲存，無需每次重複輸入。
-                              </p>
-                           </div>
-
-                           <button 
-                              onClick={handleGenerateRecommendation}
-                              disabled={isGeneratingMenu}
-                              className="w-full bg-black text-[#bef264] py-4 font-black uppercase tracking-[0.2em] text-xs hover:bg-[#bef264] hover:text-black transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
-                           >
-                              {isGeneratingMenu ? (
-                                 <><div className="animate-spin"><Zap size={16}/></div> 正在權衡美味與數據...</>
-                              ) : (
-                                 <><Brain size={16}/> 啟動美食與數據運算</>
-                              )}
-                           </button>
-                        </div>
-
-                        {/* Result Display */}
-                        {aiRecommendation && (
-                           <div className="flex-1 bg-white border-2 border-gray-100 p-6 rounded-sm shadow-inner overflow-y-auto custom-scrollbar relative animate-in fade-in slide-in-from-bottom-4">
-                              <div className="absolute top-0 left-0 bg-[#bef264] text-black px-3 py-1 text-[9px] font-black uppercase tracking-widest">
-                                 AI Foodie Recommendation
-                              </div>
-                              <div className="mt-6 space-y-4 text-sm font-medium leading-relaxed text-gray-700 whitespace-pre-line">
-                                 {aiRecommendation}
-                              </div>
+                              <input type="file" ref={fileInputRef} onChange={async (e) => {
+                                 const file = e.target.files?.[0];
+                                 if (!file) return;
+                                 setIsAnalyzing(true);
+                                 try {
+                                    const base64 = await compressAndResizeImage(file);
+                                    const results = await analyzeFoodImages([base64], profile);
+                                    if (results.length > 0) {
+                                       setQuickMealName(results[0].name);
+                                       setQuickMacros(results[0].macros);
+                                       setEntryTab('QUICK');
+                                    }
+                                 } catch (err) { alert("辨識失敗"); } finally { setIsAnalyzing(false); }
+                              }} className="hidden" accept="image/*" />
                            </div>
                         )}
                      </div>
                   )}
                </div>
-
-               {/* Manual Commit Button */}
-               {entryTab === 'MANUAL' && !isCreatingFood && (
-                  <div className="p-6 border-t border-gray-100 bg-gray-50">
-                     <button 
-                        onClick={commitSingleMeal} 
-                        className="w-full bg-black text-[#bef264] py-4 rounded-sm font-black text-sm uppercase tracking-[0.3em] hover:bg-[#bef264] hover:text-black transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3"
-                     >
-                        <Zap size={18} className="fill-current" /> 封存並更新矩陣
-                     </button>
-                  </div>
-               )}
             </div>
          </div>
       )}

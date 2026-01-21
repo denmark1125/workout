@@ -34,6 +34,14 @@ export const GoalMetadata = {
   [FitnessGoal.CUSTOM]: { label: '自訂健身', focus: '用戶自定義目標', persona: '全方位顧問' },
 };
 
+export interface AiUsageLog {
+  id: string;
+  timestamp: string;
+  model: string;
+  feature: string;
+  status: 'SUCCESS' | 'FAIL';
+}
+
 export interface UserMetrics {
   id: string;
   date: string;
@@ -69,8 +77,8 @@ export interface MealRecord {
   image?: string;
   macros: MacroNutrients;
   timestamp: string;
-  servings: number; // 份數
-  portionLabel?: string; // 例如 "1小把", "0.5份"
+  servings: number; 
+  portionLabel?: string; 
 }
 
 export interface DietLog {
@@ -154,8 +162,8 @@ export interface UserProfile {
     fat: number;
   };
   dietaryContext?: {
-    cravings: string; // 想吃的東西 (暫存)
-    healthFocus: string; // 健康目標 (降血脂、降血糖等)
+    cravings: string;
+    healthFocus: string;
   };
   role?: 'admin' | 'user';
   lastDailyFeedbackDate?: string;

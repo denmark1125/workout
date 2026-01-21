@@ -1,12 +1,9 @@
 
-// Use namespace import to resolve environment-specific module resolution issues with Firebase exports
 import * as firebaseApp from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, addDoc, query, orderBy, limit } from 'firebase/firestore';
 
-// Destructure from the namespace to bypass potential missing type exports in certain environments
 const { initializeApp, getApps, getApp } = firebaseApp as any;
 
-// 依照指示修正環境變數讀取與預設值
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API || "AIzaSyAdr5J_-sf3Q486Wzmri3gYdOJLC-pMZEE",
   authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "workout-app-20752.firebaseapp.com",
@@ -35,91 +32,71 @@ try {
 
 export { db };
 
-/**
- * 強化混合存儲函數 (Local-First + Forced Cloud Sync)
- * 確保數據絕對會存於本地，並在有連線時即時推送至雲端。
- */
-export const syncToCloud = async (collectionName: string, data: any, userId: string, enableCloud: boolean = true, cloudDataOverride?: any) => {
-  if (!userId) return;
-
-  const localBackupKey = `matrix_backup_${userId}_${collectionName}`;
-  const timestamp = new Date().toISOString();
-
-  // 1. 強制保存至本地 (絕對存儲，包含圖片等所有細節)
+// --- AI Usage Logging ---
+export const logAiTransaction = async (userId: string, model: string, feature: string, status: 'SUCCESS' | 'FAIL' = 'SUCCESS') => {
+  if (!db || !userId) return;
   try {
-    localStorage.setItem(localBackupKey, JSON.stringify({
-      data,
-      updatedAt: timestamp
-    }));
-  } catch (e) {
-    console.warn(`[本地寫入警告] ${collectionName} 空間受限。`, e);
-  }
-
-  // 2. 雲端推送 (若連線正常且允許同步)
-  if (!enableCloud || !db) return;
-
-  try {
-    const docRef = doc(db, collectionName, userId);
-    // 使用過濾後的數據上傳 (例如體態紀錄中不含 Base64 照片，僅存分析文字)
-    const payload = cloudDataOverride !== undefined ? cloudDataOverride : data;
-
-    await setDoc(docRef, { 
-      data: payload, 
-      updatedAt: timestamp, 
-      ownerId: userId 
+    const usageRef = collection(db, 'ai_usage_logs');
+    await addDoc(usageRef, {
+      userId,
+      model,
+      feature,
+      status,
+      timestamp: new Date().toISOString()
     });
-    
-    // 註冊表特殊邏輯
-    if (collectionName === 'profiles') {
-      const registryRef = doc(db, 'system_metadata', 'user_registry');
-      await setDoc(registryRef, { [userId]: { 
-        memberId: userId, 
-        name: data.name, 
-        lastActive: timestamp 
-      } }, { merge: true });
-    }
-  } catch (error) {
-    console.error(`[雲端同步失敗] ${collectionName}:`, error);
-    throw error; // 拋出錯誤供 UI 顯示警告
+  } catch (e) {
+    console.error("AI Log Error", e);
   }
 };
 
-/**
- * 智能獲取函數
- * 同步比對本地與雲端版本，確保數據最新且完整。
- */
+export const getRecentAiLogs = async (limitCount: number = 50) => {
+  if (!db) return [];
+  try {
+    const usageRef = collection(db, 'ai_usage_logs');
+    const q = query(usageRef, orderBy('timestamp', 'desc'), limit(limitCount));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    return [];
+  }
+};
+
+// --- Sync Functions ---
+export const syncToCloud = async (collectionName: string, data: any, userId: string, enableCloud: boolean = true, cloudDataOverride?: any) => {
+  if (!userId) return;
+  const localBackupKey = `matrix_backup_${userId}_${collectionName}`;
+  const timestamp = new Date().toISOString();
+
+  try {
+    localStorage.setItem(localBackupKey, JSON.stringify({ data, updatedAt: timestamp }));
+  } catch (e) {}
+
+  if (!enableCloud || !db) return;
+  try {
+    const docRef = doc(db, collectionName, userId);
+    const payload = cloudDataOverride !== undefined ? cloudDataOverride : data;
+    await setDoc(docRef, { data: payload, updatedAt: timestamp, ownerId: userId });
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const fetchFromCloud = async (collectionName: string, userId: string) => {
   if (!userId) return null;
-  
   let cloudDataObj: any = null;
   let localDataObj: any = null;
-
-  // 讀取本地
   const localRaw = localStorage.getItem(`matrix_backup_${userId}_${collectionName}`);
-  if (localRaw) {
-    try { localDataObj = JSON.parse(localRaw); } catch(e) {}
-  }
-
-  // 讀取雲端
+  if (localRaw) { try { localDataObj = JSON.parse(localRaw); } catch(e) {} }
   if (db) {
     try {
       const snap = await getDoc(doc(db, collectionName, userId));
-      if (snap.exists()) {
-        cloudDataObj = snap.data();
-      }
-    } catch (e) {
-      console.warn(`[雲端讀取異常] ${collectionName}。`);
-    }
+      if (snap.exists()) cloudDataObj = snap.data();
+    } catch (e) {}
   }
-
-  // 合併與決策
   if (!cloudDataObj) return localDataObj?.data || null;
   if (!localDataObj) return cloudDataObj.data;
-
   const localTime = new Date(localDataObj.updatedAt).getTime();
   const cloudTime = new Date(cloudDataObj.updatedAt).getTime();
-
-  // 體態紀錄特殊處理：補回本地照片
   if (collectionName === 'physique' && cloudTime >= localTime) {
     let result = cloudDataObj.data;
     result = result.map((cloudItem: any) => {
@@ -128,7 +105,6 @@ export const fetchFromCloud = async (collectionName: string, userId: string) => 
     });
     return result;
   }
-
   return (cloudTime >= localTime) ? cloudDataObj.data : localDataObj.data;
 };
 
@@ -146,14 +122,6 @@ export const getAllUsers = async () => {
     const snap = await getDoc(doc(db, 'system_metadata', 'user_registry'));
     return snap.exists() ? snap.data() : {};
   } catch (e) { return {}; }
-};
-
-export const getAllAuthLogs = async () => {
-  if (!db) return [];
-  try {
-    const querySnapshot = await getDocs(collection(db, "auth_logs"));
-    return querySnapshot.docs.map(doc => doc.data());
-  } catch (e) { return []; }
 };
 
 export const purgeUser = async (userId: string) => {

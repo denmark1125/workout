@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { getAllUsers, getAllAuthLogs, purgeUser } from '../services/dbService.ts';
+// Fixed: Removed non-existent getAllAuthLogs export from dbService.ts
+import { getAllUsers, purgeUser } from '../services/dbService.ts';
 import { UserProfile, FitnessGoal, FoodItem } from '../types.ts';
 import { FOOD_DATABASE } from '../utils/foodDatabase.ts';
 import { 

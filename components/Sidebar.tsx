@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { FitnessGoal, GoalMetadata, UserProfile } from '../types';
-import { LayoutDashboard as DashboardIcon, Dumbbell as DumbbellIcon, Camera as CameraIcon, ScrollText as ReportIcon, Settings as SettingsIconLucide, ShieldCheck as AdminIcon, LogOut as LogoutIcon, Package as VaultIcon, Utensils as UtensilsIcon, ChevronRight } from 'lucide-react';
+import { LayoutDashboard as DashboardIcon, Dumbbell as DumbbellIcon, Camera as CameraIcon, ScrollText as ReportIcon, Settings as SettingsIconLucide, ShieldCheck as AdminIcon, LogOut as LogoutIcon, Package as VaultIcon, Utensils as UtensilsIcon, Cpu, ChevronRight } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -21,6 +21,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, memberId, is
     { id: 'scan', label: '體態診斷', icon: <CameraIcon size={18} /> },
     { id: 'report', label: '戰略週報', icon: <ReportIcon size={18} /> },
     { id: 'vault', label: '收藏金庫', icon: <VaultIcon size={18} />, badge: hasPendingReward }, 
+    { id: 'aiconsole', label: 'AI 指揮中心', icon: <Cpu size={18} /> },
     { id: 'settings', label: '系統設定', icon: <SettingsIconLucide size={18} /> },
     ...(isAdmin ? [{ id: 'admin', label: '管理面板', icon: <AdminIcon size={18} /> }] : []),
   ];
